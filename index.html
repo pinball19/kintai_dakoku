@@ -4,19 +4,101 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>打刻システム</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f7fb;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .container {
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            text-align: center;
+            width: 80%;
+            max-width: 400px;
+        }
+
+        h2 {
+            color: #333;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+
+        .name-buttons {
+            display: flex;
+            justify-content: space-evenly;
+            margin-bottom: 30px;
+        }
+
+        .name-buttons button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .name-buttons button:hover {
+            background-color: #45a049;
+        }
+
+        .action-buttons button {
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            width: 45%;
+            margin: 10px 5px;
+        }
+
+        .action-buttons button:hover {
+            background-color: #0056b3;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+
+            .action-buttons button {
+                width: 100%;
+                margin: 10px 0;
+            }
+        }
+    </style>
 </head>
 <body>
-    <h2>打刻フォーム</h2>
-    
-    <label for="name">名前:</label>
-    <select id="name">
-        <option value="佐藤">佐藤</option>
-        <option value="鈴木">鈴木</option>
-        <option value="田中">田中</option>
-    </select>
+    <div class="container">
+        <h2>打刻フォーム</h2>
 
-    <button onclick="recordTime('出勤')">出勤</button>
-    <button onclick="recordTime('退勤')">退勤</button>
+        <!-- 名前ボタン -->
+        <div class="name-buttons">
+            <button id="sato" onclick="selectName('佐藤')">佐藤</button>
+            <button id="suzuki" onclick="selectName('鈴木')">鈴木</button>
+            <button id="tanaka" onclick="selectName('田中')">田中</button>
+        </div>
+
+        <!-- 出勤・退勤ボタン -->
+        <div class="action-buttons">
+            <button onclick="recordTime('出勤')">出勤</button>
+            <button onclick="recordTime('退勤')">退勤</button>
+        </div>
+    </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
@@ -34,23 +116,31 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        async function recordTime(type) {
-            const name = document.getElementById("name").value;
-            const now = new Date();
-            const timestamp = now.toISOString();
+        let selectedName = null;
 
-            if (!name) {
+        // 名前を選択する関数
+        function selectName(name) {
+            selectedName = name;
+            alert(`${name} さんが選ばれました`);
+        }
+
+        // 出勤・退勤ボタンの関数
+        async function recordTime(type) {
+            if (!selectedName) {
                 alert("名前を選択してください");
                 return;
             }
 
+            const now = new Date();
+            const timestamp = now.toISOString();
+
             await addDoc(collection(db, "attendance"), {
-                name: name,
+                name: selectedName,
                 type: type,
                 timestamp: timestamp
             });
 
-            alert(`${name} さんの ${type} を記録しました！（時刻: ${timestamp}）`);
+            alert(`${selectedName} さんの ${type} を記録しました！（時刻: ${timestamp}）`);
         }
     </script>
 </body>
