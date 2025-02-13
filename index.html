@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>打刻システム</title>
+</head>
+<body>
+    <h2>打刻フォーム</h2>
+    
+    <label for="name">名前:</label>
+    <select id="name">
+        <option value="佐藤">佐藤</option>
+        <option value="鈴木">鈴木</option>
+        <option value="田中">田中</option>
+    </select>
+
+    <button onclick="recordTime('出勤')">出勤</button>
+    <button onclick="recordTime('退勤')">退勤</button>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+        import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        async function recordTime(type) {
+            const name = document.getElementById("name").value;
+            const now = new Date();
+            const timestamp = now.toISOString();
+
+            if (!name) {
+                alert("名前を選択してください");
+                return;
+            }
+
+            await addDoc(collection(db, "attendance"), {
+                name: name,
+                type: type,
+                timestamp: timestamp
+            });
+
+            alert(`${name} さんの ${type} を記録しました！（時刻: ${timestamp}）`);
+        }
+    </script>
+</body>
+</html>
