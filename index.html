@@ -2,151 +2,326 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>打刻システム3</title>
+  <title>勤怠管理システム</title>
+  <!-- Firebase SDK: Firestore と初期化用 -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <style>
-    body {
-      font-family: 'Arial', sans-serif;
-      background-color: #f4f7fb;
-      margin: 0;
-      padding: 0;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-    }
-    .container {
-      background-color: #fff;
-      border-radius: 10px;
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-      padding: 30px;
-      text-align: center;
-      width: 80%;
-      max-width: 400px;
-    }
-    h2 {
-      color: #333;
-      font-size: 24px;
-      margin-bottom: 20px;
-    }
-    .name-buttons {
-      display: flex;
-      justify-content: space-evenly;
-      margin-bottom: 30px;
-    }
-    .name-buttons button {
-      background-color: #4CAF50;
-      color: white;
-      border: none;
-      padding: 10px 20px;
-      font-size: 16px;
-      border-radius: 5px;
-      cursor: pointer;
-      transition: background-color 0.3s ease;
-    }
-    .name-buttons button:hover {
-      background-color: #45a049;
-    }
-    .action-buttons button {
-      background-color: #007BFF;
-      color: white;
-      border: none;
-      padding: 15px 30px;
-      font-size: 18px;
-      border-radius: 5px;
-      cursor: pointer;
-      transition: background-color 0.3s ease;
-      width: 45%;
-      margin: 10px 5px;
-    }
-    .action-buttons button:hover {
-      background-color: #0056b3;
-    }
-    @media (max-width: 600px) {
-      .container {
-        padding: 20px;
-      }
-      .action-buttons button {
-        width: 100%;
-        margin: 10px 0;
-      }
-    }
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .hidden { display: none; }
+    input { padding: 8px; font-size: 16px; }
+    button { padding: 10px 20px; font-size: 16px; margin-top: 10px; }
+    #login, #dashboard, #history { margin-bottom: 30px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    table, th, td { border: 1px solid #ccc; }
+    th, td { padding: 8px; text-align: center; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h2>打刻フォーム</h2>
-    <!-- 名前ボタン -->
-    <div class="name-buttons">
-      <button id="sato" onclick="selectName('佐藤')">佐藤</button>
-      <button id="suzuki" onclick="selectName('鈴木')">鈴木</button>
-      <button id="tanaka" onclick="selectName('田中')">田中</button>
-    </div>
-    <!-- 出勤・退勤ボタン -->
-    <div class="action-buttons">
-      <button onclick="recordTime('出勤')">出勤</button>
-      <button onclick="recordTime('退勤')">退勤</button>
-    </div>
+  <!-- ログイン画面 -->
+  <div id="login">
+    <h2>ログイン</h2>
+    <input type="text" id="employeeNumber" placeholder="社員番号"><br><br>
+    <input type="password" id="password" placeholder="パスワード"><br><br>
+    <button id="loginBtn">ログイン</button>
+    <button id="registerBtn">新規登録</button>
+    <div id="loginError" style="color: red;"></div>
   </div>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
-    import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+  <!-- ダッシュボード（打刻・当日記録） -->
+  <div id="dashboard" class="hidden">
+    <div style="display:flex; justify-content: space-between; align-items: center;">
+      <span id="userInfo"></span>
+      <button id="logoutBtn">ログアウト</button>
+    </div>
+    <h2>今日の打刻</h2>
+    <div id="punchStatus"></div>
+    <button id="punchBtn">出勤打刻</button>
+    <div id="todayRecords">
+      <h3>当日の記録</h3>
+      <ul id="recordList"></ul>
+    </div>
+    <div id="workDuration" style="font-weight: bold; margin-top: 10px;"></div>
+    <button id="showHistoryBtn">過去の記録を見る</button>
+  </div>
 
+  <!-- 過去の記録（履歴） -->
+  <div id="history" class="hidden">
+    <h2>過去の打刻記録（直近30日）</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>日付</th>
+          <th>出勤時刻</th>
+          <th>退勤時刻</th>
+          <th>勤務時間</th>
+        </tr>
+      </thead>
+      <tbody id="historyTableBody"></tbody>
+    </table>
+    <button id="backToDashboardBtn">戻る</button>
+  </div>
+
+  <script>
+    // Firebase の設定（ご自身のプロジェクト情報に置き換えてください）
     const firebaseConfig = {
-      apiKey: "AIzaSyDzYAtr_PA8cfibICKwb3KZA6xyeNDHtjY",
-      authDomain: "kintaidakoku-21454.firebaseapp.com",
-      projectId: "kintaidakoku-21454",
-      storageBucket: "kintaidakoku-21454.appspot.com",  // ※ コピーした内容が正しい前提
-      messagingSenderId: "185561108336",
-      appId: "1:185561108336:web:a5eab6de7a713a946a49b5",
-      measurementId: "G-TZKSMNH7HZ"
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID"
     };
 
-    console.log("Firebase初期化開始:", firebaseConfig);
-    const app = initializeApp(firebaseConfig);
-    console.log("Firebase初期化完了:", app);
+    // Firebase 初期化
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
-    const db = getFirestore(app);
-    console.log("Firestore初期化完了:", db);
+    // DOM 要素の取得
+    const loginDiv = document.getElementById('login');
+    const dashboardDiv = document.getElementById('dashboard');
+    const historyDiv = document.getElementById('history');
+    const loginBtn = document.getElementById('loginBtn');
+    const registerBtn = document.getElementById('registerBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const punchBtn = document.getElementById('punchBtn');
+    const showHistoryBtn = document.getElementById('showHistoryBtn');
+    const backToDashboardBtn = document.getElementById('backToDashboardBtn');
+    const employeeNumberInput = document.getElementById('employeeNumber');
+    const passwordInput = document.getElementById('password');
+    const loginErrorDiv = document.getElementById('loginError');
+    const userInfoSpan = document.getElementById('userInfo');
+    const recordList = document.getElementById('recordList');
+    const punchStatusDiv = document.getElementById('punchStatus');
+    const workDurationDiv = document.getElementById('workDuration');
+    const historyTableBody = document.getElementById('historyTableBody');
 
-    let selectedName = null;
+    // 現在のユーザー情報（例：{ employeeNumber: "12345" }）を管理
+    let currentUser = null;
+    let todayPunches = [];
 
-    // 名前選択関数
-    window.selectName = function(name) {
-      selectedName = name;
-      console.log("名前が選択されました:", selectedName);
-      alert(`${name} さんが選ばれました`);
-    };
+    // セッション管理（localStorage を利用）
+    function loadSession() {
+      const storedUser = localStorage.getItem("currentUser");
+      if (storedUser) {
+        currentUser = JSON.parse(storedUser);
+        showDashboard();
+      }
+    }
 
-    // 出勤・退勤記録関数
-    window.recordTime = async function(type) {
-      console.log("recordTime() が呼ばれました。処理開始。 type:", type);
-      
-      if (!selectedName) {
-        console.warn("名前が未選択です。");
-        alert("名前を選択してください");
+    function saveSession() {
+      localStorage.setItem("currentUser", JSON.stringify(currentUser));
+    }
+
+    function clearSession() {
+      localStorage.removeItem("currentUser");
+      currentUser = null;
+    }
+
+    // UI 表示の切り替え
+    function showDashboard() {
+      loginDiv.classList.add('hidden');
+      dashboardDiv.classList.remove('hidden');
+      historyDiv.classList.add('hidden');
+      userInfoSpan.textContent = "社員番号: " + currentUser.employeeNumber;
+      loadTodayRecords();
+    }
+
+    function showLogin() {
+      loginDiv.classList.remove('hidden');
+      dashboardDiv.classList.add('hidden');
+      historyDiv.classList.add('hidden');
+    }
+
+    // ログイン処理（Firestore の users コレクションから検証）
+    loginBtn.addEventListener('click', () => {
+      const employeeNumber = employeeNumberInput.value.trim();
+      const password = passwordInput.value;
+      if (!employeeNumber || !password) {
+        loginErrorDiv.textContent = "社員番号とパスワードを入力してください。";
         return;
       }
-
-      const now = new Date();
-      const timestamp = now.toISOString();
-      console.log("現在のタイムスタンプ:", timestamp);
-
-      try {
-        console.log("Firestoreへデータ書き込み開始");
-        const docRef = await addDoc(collection(db, "attendance"), {
-          name: selectedName,
-          type: type,
-          timestamp: timestamp
+      // 「users」コレクションのドキュメントID を社員番号として利用
+      db.collection("users").doc(employeeNumber).get()
+        .then(doc => {
+          if (doc.exists) {
+            const userData = doc.data();
+            // パスワードチェック（※本番では必ずハッシュ化を検討してください）
+            if (userData.password === password) {
+              currentUser = { employeeNumber: employeeNumber };
+              saveSession();
+              showDashboard();
+            } else {
+              loginErrorDiv.textContent = "パスワードが間違っています。";
+            }
+          } else {
+            loginErrorDiv.textContent = "ユーザーが存在しません。新規登録してください。";
+          }
+        })
+        .catch(error => {
+          console.error("ログインエラー: ", error);
+          loginErrorDiv.textContent = "ログイン中にエラーが発生しました。";
         });
-        console.log("Firestoreへの書き込み成功。ドキュメントID:", docRef.id);
-        alert(`${selectedName} さんの ${type} を記録しました！（時刻: ${timestamp}）`);
-      } catch (error) {
-        console.error("Firestore 書き込みエラー:", error);
-        alert("データの記録に失敗しました。コンソールを確認してください。");
+    });
+
+    // 新規登録処理
+    registerBtn.addEventListener('click', () => {
+      const employeeNumber = employeeNumberInput.value.trim();
+      const password = passwordInput.value;
+      if (!employeeNumber || !password) {
+        loginErrorDiv.textContent = "社員番号とパスワードを入力してください。";
+        return;
       }
-    };
+      // ユーザーの存在確認
+      db.collection("users").doc(employeeNumber).get()
+        .then(doc => {
+          if (doc.exists) {
+            loginErrorDiv.textContent = "この社員番号は既に登録されています。";
+          } else {
+            // ユーザー登録（平文で保存していますが、実際はハッシュ化が必要です）
+            db.collection("users").doc(employeeNumber).set({
+              employeeNumber: employeeNumber,
+              password: password
+            })
+            .then(() => {
+              currentUser = { employeeNumber: employeeNumber };
+              saveSession();
+              showDashboard();
+            })
+            .catch(error => {
+              console.error("登録エラー: ", error);
+              loginErrorDiv.textContent = "登録中にエラーが発生しました。";
+            });
+          }
+        })
+        .catch(error => {
+          console.error("新規登録確認エラー: ", error);
+          loginErrorDiv.textContent = "登録確認中にエラーが発生しました。";
+        });
+    });
+
+    // ログアウト処理
+    logoutBtn.addEventListener('click', () => {
+      clearSession();
+      showLogin();
+    });
+
+    // 出勤・退勤打刻処理
+    punchBtn.addEventListener('click', () => {
+      if (!currentUser) return;
+      const now = new Date();
+      const type = punchBtn.textContent.includes("出勤") ? "clockIn" : "clockOut";
+      const record = {
+        userId: currentUser.employeeNumber,
+        timestamp: firebase.firestore.Timestamp.fromDate(now),
+        type: type
+      };
+      db.collection("punchRecords").add(record)
+        .then(() => {
+          loadTodayRecords();
+        })
+        .catch(err => {
+          console.error("打刻エラー: ", err);
+        });
+    });
+
+    // 当日の記録を取得
+    function loadTodayRecords() {
+      if (!currentUser) return;
+      const startOfDay = new Date();
+      startOfDay.setHours(0,0,0,0);
+      db.collection("punchRecords")
+        .where("userId", "==", currentUser.employeeNumber)
+        .where("timestamp", ">=", firebase.firestore.Timestamp.fromDate(startOfDay))
+        .orderBy("timestamp", "asc")
+        .get()
+        .then(snapshot => {
+          todayPunches = [];
+          recordList.innerHTML = "";
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            todayPunches.push(data);
+            const li = document.createElement("li");
+            const timeString = data.timestamp.toDate().toLocaleTimeString();
+            li.textContent = (data.type === "clockIn" ? "出勤: " : "退勤: ") + timeString;
+            recordList.appendChild(li);
+          });
+          updatePunchStatus();
+        });
+    }
+
+    // 打刻ボタンの状態および勤務時間表示更新
+    function updatePunchStatus() {
+      let lastPunch = todayPunches[todayPunches.length - 1];
+      if (!lastPunch || lastPunch.type === "clockOut") {
+        punchBtn.textContent = "出勤打刻";
+        punchStatusDiv.textContent = "まだ出勤打刻がありません";
+        workDurationDiv.textContent = "";
+      } else {
+        punchBtn.textContent = "退勤打刻";
+        punchStatusDiv.textContent = "出勤済み: " + lastPunch.timestamp.toDate().toLocaleTimeString();
+        // 最初の出勤と退勤で勤務時間を計算（例として）
+        const clockIn = todayPunches.find(r => r.type === "clockIn");
+        const clockOut = todayPunches.find(r => r.type === "clockOut");
+        if (clockIn && clockOut) {
+          const durationMs = clockOut.timestamp.toDate() - clockIn.timestamp.toDate();
+          const durationHours = (durationMs / (1000 * 60 * 60)).toFixed(2);
+          workDurationDiv.textContent = "勤務時間: " + durationHours + " 時間";
+        }
+      }
+    }
+
+    // 履歴画面への切り替え
+    showHistoryBtn.addEventListener('click', () => {
+      dashboardDiv.classList.add('hidden');
+      historyDiv.classList.remove('hidden');
+      loadHistoryRecords();
+    });
+
+    // 過去30日分の記録を取得（日単位で集計）
+    function loadHistoryRecords() {
+      if (!currentUser) return;
+      const pastDate = new Date();
+      pastDate.setDate(pastDate.getDate() - 30);
+      db.collection("punchRecords")
+        .where("userId", "==", currentUser.employeeNumber)
+        .where("timestamp", ">=", firebase.firestore.Timestamp.fromDate(pastDate))
+        .orderBy("timestamp", "asc")
+        .get()
+        .then(snapshot => {
+          const recordsByDay = {};
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            const dateStr = data.timestamp.toDate().toLocaleDateString();
+            if (!recordsByDay[dateStr]) {
+              recordsByDay[dateStr] = { clockIn: null, clockOut: null };
+            }
+            if (data.type === "clockIn") {
+              recordsByDay[dateStr].clockIn = data.timestamp.toDate().toLocaleTimeString();
+            } else if (data.type === "clockOut") {
+              recordsByDay[dateStr].clockOut = data.timestamp.toDate().toLocaleTimeString();
+            }
+          });
+          historyTableBody.innerHTML = "";
+          for (const date in recordsByDay) {
+            const { clockIn, clockOut } = recordsByDay[date];
+            let duration = "";
+            if (clockIn && clockOut) {
+              const timeDiff = new Date("1970/01/01 " + clockOut) - new Date("1970/01/01 " + clockIn);
+              duration = (timeDiff / (1000 * 60 * 60)).toFixed(2) + " 時間";
+            }
+            const row = document.createElement("tr");
+            row.innerHTML = "<td>" + date + "</td><td>" + (clockIn || "-") + "</td><td>" + (clockOut || "-") + "</td><td>" + duration + "</td>";
+            historyTableBody.appendChild(row);
+          }
+        });
+    }
+
+    // 履歴画面からダッシュボードへ戻る
+    backToDashboardBtn.addEventListener('click', () => {
+      historyDiv.classList.add('hidden');
+      dashboardDiv.classList.remove('hidden');
+    });
+
+    // ページ読み込み時にセッション確認
+    window.onload = loadSession;
   </script>
 </body>
 </html>
