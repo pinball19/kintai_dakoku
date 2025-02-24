@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>勤怠管理システム - 過去の記録</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>勤怠管理システム</h1>
+    </header>
+    <section id="history">
+      <h2>過去の打刻記録（直近30日）</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>日付</th>
+            <th>出勤時刻</th>
+            <th>退勤時刻</th>
+            <th>勤務時間</th>
+          </tr>
+        </thead>
+        <tbody id="historyTableBody"></tbody>
+      </table>
+      <button id="backToDashboardBtn">戻る</button>
+    </section>
+  </div>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyDzYAtr_PA8cfibICKwb3KZA6xyeNDHtjY",
+      authDomain: "kintaidakoku-21454.firebaseapp.com",
+      projectId: "kintaidakoku-21454",
+      storageBucket: "kintaidakoku-21454.firebasestorage.app",
+      messagingSenderId: "185561108336",
+      appId: "1:185561108336:web:a5eab6de7a713a946a49b5",
+      measurementId: "G-TZKSMNH7HZ"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const historyTableBody = document.getElementById("historyTableBody");
+    const backToDashboardBtn = document.getElementById("backToDashboardBtn");
+
+    let currentUser = null;
+    window.onload = () => {
+      const user = localStorage.getItem("currentUser");
+      if (!user) {
+        window.location.href = "login.html";
+      } else {
+        currentUser = JSON.parse(user);
+        loadHistoryRecords();
+      }
+    };
+
+    function loadHistoryRecords() {
+      const pastDate = new Date();
+      pastDate.setDate(pastDate.getDate() - 30);
+      db.collection("punchRecords")
+        .where("userId", "==", currentUser.employeeNumber)
+        .where("timestamp", ">=", firebase.firestore.Timestamp.fromDate(pastDate))
+        .orderBy("timestamp", "asc")
+        .get()
+        .then(snapshot => {
+          const recordsByDay = {};
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            const dateStr = data.timestamp.toDate().toLocaleDateString();
+            if (!recordsByDay[dateStr]) {
+              recordsByDay[dateStr] = { clockIn: null, clockOut: null };
+            }
+            if (data.type === "clockIn") {
+              recordsByDay[dateStr].clockIn = data.timestamp.toDate().toLocaleTimeString();
+            } else if (data.type === "clockOut") {
+              recordsByDay[dateStr].clockOut = data.timestamp.toDate().toLocaleTimeString();
+            }
+          });
+          historyTableBody.innerHTML = "";
+          for (const date in recordsByDay) {
+            const { clockIn, clockOut } = recordsByDay[date];
+            let duration = "";
+            if (clockIn && clockOut) {
+              const timeDiff = new Date("1970/01/01 " + clockOut) - new Date("1970/01/01 " + clockIn);
+              duration = (timeDiff / (1000 * 60 * 60)).toFixed(2) + " 時間";
+            }
+            const row = document.createElement("tr");
+            row.innerHTML = "<td>" + date + "</td><td>" + (clockIn || "-") + "</td><td>" + (clockOut || "-") + "</td><td>" + duration + "</td>";
+            historyTableBody.appendChild(row);
+          }
+        });
+    }
+
+    backToDashboardBtn.addEventListener("click", () => {
+      window.location.href = "dashboard.html";
+    });
+  </script>
+</body>
+</html>
