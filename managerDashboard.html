@@ -269,7 +269,6 @@ const firebaseConfig = {
     // CSVダウンロード
     downloadCSVBtn.addEventListener("click", async () => {
       // 検索・ソート条件は同じだが、全件取得する例
-      // 大量データの場合は要注意
       const { baseQuery } = buildQuery();
       const snapshot = await baseQuery.get();
       if (snapshot.empty) {
@@ -340,7 +339,7 @@ const firebaseConfig = {
     // ★ 同日打刻のグループ化処理
     function groupPunchRecords(snapshot) {
       // キー: "userId_YYYY/MM/DD"
-      // 値: { userId, dateStr, clockIn(最初), clockOut(最後) }
+      // 値: { userId, dateStr, clockIn(最も遅い), clockOut(最も遅い) }
       let mapKeyToObj = {};
       let grouped = [];
 
@@ -358,38 +357,26 @@ const firebaseConfig = {
           mapKeyToObj[key] = {
             userId: userId,
             dateStr: dateStr,
-            clockIn: null,
-            clockOut: null
+            clockIn: null,   // 最も遅い出勤
+            clockOut: null,  // 最も遅い退勤
           };
           grouped.push(mapKeyToObj[key]);
         }
         let rec = mapKeyToObj[key];
 
-        // 出勤は最初のもの、退勤は最後のものを使う例
+        // 出勤は「最も遅い」ものを採用
         if (data.type === "clockIn") {
-          if (!rec.clockIn) {
+          if (!rec.clockIn || dateObj > rec.clockIn) {
             rec.clockIn = dateObj;
-          } else {
-            // より早い時間があれば更新
-            if (dateObj < rec.clockIn) {
-              rec.clockIn = dateObj;
-            }
           }
-        } else if (data.type === "clockOut") {
-          if (!rec.clockOut) {
+        }
+        // 退勤は「最も遅い」ものを採用
+        else if (data.type === "clockOut") {
+          if (!rec.clockOut || dateObj > rec.clockOut) {
             rec.clockOut = dateObj;
-          } else {
-            // より遅い時間があれば更新
-            if (dateObj > rec.clockOut) {
-              rec.clockOut = dateObj;
-            }
           }
         }
       });
-
-      // grouped配列はsnapshotの順序と同じ順で生成されるが、さらに
-      // userId + dateStr の並び替えをしたい場合はここで sort() も可能
-      // ただし既に orderBy しているので概ね順序は整合します
 
       return grouped;
     }
@@ -400,7 +387,14 @@ const firebaseConfig = {
       grouped.forEach(obj => {
         let clockInStr = obj.clockIn ? obj.clockIn.toLocaleTimeString() : "-";
         let clockOutStr = obj.clockOut ? obj.clockOut.toLocaleTimeString() : "-";
-        let durationStr = "-"; // 必要なら計算
+
+        // 勤務時間の計算 (退勤 - 出勤)
+        let durationStr = "-";
+        if (obj.clockIn && obj.clockOut) {
+          let ms = obj.clockOut - obj.clockIn;
+          let hours = ms / (1000 * 60 * 60);
+          durationStr = hours.toFixed(2);
+        }
 
         let row = document.createElement("tr");
         row.innerHTML = `
@@ -420,9 +414,14 @@ const firebaseConfig = {
       grouped.forEach(obj => {
         let clockInStr = obj.clockIn ? obj.clockIn.toLocaleTimeString() : "";
         let clockOutStr = obj.clockOut ? obj.clockOut.toLocaleTimeString() : "";
-        let durationStr = ""; // 必要なら計算
 
-        // カンマ区切り1行
+        let durationStr = "";
+        if (obj.clockIn && obj.clockOut) {
+          let ms = obj.clockOut - obj.clockIn;
+          let hours = ms / (1000 * 60 * 60);
+          durationStr = hours.toFixed(2);
+        }
+
         csv += `${obj.userId},${obj.dateStr},${clockInStr},${clockOutStr},${durationStr}\n`;
       });
       return csv;
