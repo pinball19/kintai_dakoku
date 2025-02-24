@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>管理者ダッシュボード</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <style>
+    .search-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      align-items: center;
+    }
+    .paging-buttons {
+      margin-top: 16px;
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>管理者ダッシュボード</h1>
+    </header>
+    <section id="managerSection">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span id="managerInfo"></span>
+        <button id="logoutBtn">ログアウト</button>
+      </div>
+
+      <!-- 検索・フィルタエリア -->
+      <div class="search-bar">
+        <label>社員番号:</label>
+        <input type="text" id="searchEmployeeNumber" placeholder="例: 12345">
+
+        <label>日付範囲:</label>
+        <input type="date" id="startDate">
+        <span>～</span>
+        <input type="date" id="endDate">
+
+        <label>並べ替え:</label>
+        <select id="sortSelect">
+          <option value="userIdAsc">社員番号 昇順</option>
+          <option value="userIdDesc">社員番号 降順</option>
+          <option value="dateAsc">日付 昇順</option>
+          <option value="dateDesc">日付 降順</option>
+        </select>
+
+        <button id="searchBtn">検索</button>
+      </div>
+
+      <!-- 一覧テーブル -->
+      <table>
+        <thead>
+          <tr>
+            <th>社員番号</th>
+            <th>日付</th>
+            <th>出勤時刻</th>
+            <th>退勤時刻</th>
+            <th>勤務時間</th>
+          </tr>
+        </thead>
+        <tbody id="recordsTableBody"></tbody>
+      </table>
+
+      <!-- ページングボタン -->
+      <div class="paging-buttons">
+        <button id="prevPageBtn" disabled>前へ</button>
+        <button id="nextPageBtn" disabled>次へ</button>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // Firebase 設定
+const firebaseConfig = {
+  apiKey: "AIzaSyDzYAtr_PA8cfibICKwb3KZA6xyeNDHtjY",
+  authDomain: "kintaidakoku-21454.firebaseapp.com",
+  projectId: "kintaidakoku-21454",
+  storageBucket: "kintaidakoku-21454.firebasestorage.app",
+  messagingSenderId: "185561108336",
+  appId: "1:185561108336:web:a5eab6de7a713a946a49b5",
+  measurementId: "G-TZKSMNH7HZ"
+};
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const managerInfoSpan = document.getElementById("managerInfo");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const searchEmployeeNumberInput = document.getElementById("searchEmployeeNumber");
+    const startDateInput = document.getElementById("startDate");
+    const endDateInput = document.getElementById("endDate");
+    const sortSelect = document.getElementById("sortSelect");
+    const searchBtn = document.getElementById("searchBtn");
+    const recordsTableBody = document.getElementById("recordsTableBody");
+    const prevPageBtn = document.getElementById("prevPageBtn");
+    const nextPageBtn = document.getElementById("nextPageBtn");
+
+    let currentManager = null;
+
+    // ページング用の変数
+    const pageSize = 5;  // 1ページあたりの表示件数
+    let lastVisible = null;     // 次ページ読み込みの開始位置
+    let firstVisible = null;    // 前ページ読み込みの開始位置
+    let prevStack = [];         // 前ページ情報をスタック管理
+
+    window.onload = () => {
+      const mgr = localStorage.getItem("currentManager");
+      if (!mgr) {
+        // 未ログイン → 管理者ログイン画面へ
+        window.location.href = "managerLogin.html";
+      } else {
+        currentManager = JSON.parse(mgr);
+        managerInfoSpan.textContent = "管理者ID: " + currentManager.managerId;
+      }
+    };
+
+    logoutBtn.addEventListener("click", () => {
+      localStorage.removeItem("currentManager");
+      window.location.href = "managerLogin.html";
+    });
+
+    // 検索ボタン押下
+    searchBtn.addEventListener("click", () => {
+      // ページングリセット
+      lastVisible = null;
+      firstVisible = null;
+      prevStack = [];
+      loadRecords();
+    });
+
+    // 次へボタン押下
+    nextPageBtn.addEventListener("click", () => {
+      prevStack.push(firstVisible); // 前のページの開始点をスタックに追加
+      loadRecords("next");
+    });
+
+    // 前へボタン押下
+    prevPageBtn.addEventListener("click", () => {
+      // スタックから1つ取り出して、そのページを読み込み直す
+      const prevPoint = prevStack.pop();
+      loadRecords("prev", prevPoint);
+    });
+
+    // レコード読み込み関数
+    function loadRecords(direction = "init", prevPoint = null) {
+      recordsTableBody.innerHTML = "";
+      // 検索条件を取得
+      const empNo = searchEmployeeNumberInput.value.trim();
+      const startDate = startDateInput.value ? new Date(startDateInput.value) : null;
+      const endDate = endDateInput.value ? new Date(endDateInput.value) : null;
+      const sortOption = sortSelect.value;
+
+      // Firestore クエリのベースを作成
+      let baseQuery = db.collection("punchRecords");
+
+      // 社員番号検索
+      if (empNo) {
+        // 例: userId に社員番号を保存している想定
+        baseQuery = baseQuery.where("userId", "==", empNo);
+      }
+
+      // 日付範囲
+      // punchRecordsには "timestamp" が保存されている前提
+      if (startDate) {
+        // 当日の0時にそろえる
+        startDate.setHours(0, 0, 0, 0);
+        baseQuery = baseQuery.where("timestamp", ">=", firebase.firestore.Timestamp.fromDate(startDate));
+      }
+      if (endDate) {
+        // 翌日の0時にそろえる（"未満"でフィルタ）
+        endDate.setHours(24, 0, 0, 0);
+        baseQuery = baseQuery.where("timestamp", "<", firebase.firestore.Timestamp.fromDate(endDate));
+      }
+
+      // 並べ替え
+      // Firestore は複数列ソートが難しいため、ここでは日付 or 社員番号のどちらかでソートする例を示す
+      switch (sortOption) {
+        case "userIdAsc":
+          baseQuery = baseQuery.orderBy("userId", "asc");
+          break;
+        case "userIdDesc":
+          baseQuery = baseQuery.orderBy("userId", "desc");
+          break;
+        case "dateAsc":
+          baseQuery = baseQuery.orderBy("timestamp", "asc");
+          break;
+        case "dateDesc":
+          baseQuery = baseQuery.orderBy("timestamp", "desc");
+          break;
+        default:
+          // デフォルトは日付昇順
+          baseQuery = baseQuery.orderBy("timestamp", "asc");
+      }
+
+      // ページング
+      baseQuery = baseQuery.limit(pageSize);
+
+      if (direction === "next" && lastVisible) {
+        baseQuery = baseQuery.startAfter(lastVisible);
+      } else if (direction === "prev" && prevPoint) {
+        baseQuery = baseQuery.endBefore(prevPoint).limitToLast(pageSize);
+      }
+
+      baseQuery.get()
+        .then(snapshot => {
+          if (snapshot.empty) {
+            // 取得件数0 → 次ページはない
+            if (direction === "next") {
+              alert("これ以上のデータはありません。");
+            } else if (direction === "prev") {
+              alert("前のページはありません。");
+            }
+            return;
+          }
+
+          // 取得したドキュメントを表示
+          let firstDoc = snapshot.docs[0];
+          let lastDoc = snapshot.docs[snapshot.docs.length - 1];
+          firstVisible = firstDoc;  // 今回の先頭を記録
+          lastVisible = lastDoc;    // 今回の末尾を記録
+
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            const userId = data.userId || "-";
+            const dateObj = data.timestamp.toDate();
+            const dateStr = dateObj.toLocaleDateString();
+            // 出勤時刻・退勤時刻を探すためには、同じ userId + date で clockIn/clockOut を集約する方法もあるが、
+            // ここでは punchRecords の 1行が1打刻と想定し、簡易表示のみ行う
+
+            let clockIn = "";
+            let clockOut = "";
+            // 勤務時間計算はシンプルに実装例
+            // clockIn/clockOut それぞれのドキュメントがある場合はロジックを工夫
+            if (data.type === "clockIn") {
+              clockIn = dateObj.toLocaleTimeString();
+            } else if (data.type === "clockOut") {
+              clockOut = dateObj.toLocaleTimeString();
+            }
+
+            // 勤務時間はここでは個々の打刻で計算しづらいので、複数レコードをまとめるなら別の仕組みが必要
+            // サンプルでは空欄か "-" とする
+            let durationStr = "-";
+
+            const row = document.createElement("tr");
+            row.innerHTML = `
+              <td>${userId}</td>
+              <td>${dateStr}</td>
+              <td>${clockIn || "-"}</td>
+              <td>${clockOut || "-"}</td>
+              <td>${durationStr}</td>
+            `;
+            recordsTableBody.appendChild(row);
+          });
+
+          // ページングボタンの活性/非活性を簡易的に制御
+          // 今回は取得件数が pageSize 未満なら nextPage はない
+          nextPageBtn.disabled = (snapshot.size < pageSize);
+          // prevStack が空なら前へボタンを無効化
+          prevPageBtn.disabled = (prevStack.length === 0 && direction !== "next");
+        })
+        .catch(err => {
+          console.error("レコード取得エラー:", err);
+        });
+    }
+  </script>
+</body>
+</html>
