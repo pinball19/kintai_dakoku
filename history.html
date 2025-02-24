@@ -6,6 +6,22 @@
   <link rel="stylesheet" href="style.css">
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <style>
+    /* 追加：history セクションを相対位置にして、CSV UI を絶対配置できるように */
+    #history {
+      position: relative;
+    }
+    /* CSVダウンロード用UIを右下に配置 */
+    .csv-download {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 10px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -14,19 +30,6 @@
     </header>
     <section id="history">
       <h2>過去の打刻記録（直近30日）</h2>
-      
-      <!-- CSVダウンロード用UI -->
-      <div class="csv-download">
-        <label for="monthSelect">ダウンロード対象:</label>
-        <select id="monthSelect">
-          <option value="0">今月分</option>
-          <option value="1">前月分</option>
-          <option value="2">2か月前</option>
-          <option value="3">3か月前</option>
-        </select>
-        <button id="downloadCSV">CSVダウンロード</button>
-      </div>
-      
       <table>
         <thead>
           <tr>
@@ -39,6 +42,17 @@
         <tbody id="historyTableBody"></tbody>
       </table>
       <button id="backToDashboardBtn">戻る</button>
+      <!-- CSVダウンロード用UI：右下に配置 -->
+      <div class="csv-download">
+        <label for="monthSelect">ダウンロード対象:</label>
+        <select id="monthSelect">
+          <option value="0">今月分</option>
+          <option value="1">前月分</option>
+          <option value="2">2か月前</option>
+          <option value="3">3か月前</option>
+        </select>
+        <button id="downloadCSV">CSVダウンロード</button>
+      </div>
     </section>
   </div>
   
@@ -127,7 +141,7 @@
       return { start, end };
     }
     
-    // 取得したレコードをCSV形式に変換する関数
+    // CSV形式に変換する関数
     function convertRecordsToCSV(records) {
       let csv = "日付,出勤時刻,退勤時刻,勤務時間\n";
       let recordsByDay = {};
@@ -187,7 +201,6 @@
         });
     });
     
-    // 戻るボタン処理
     backToDashboardBtn.addEventListener("click", () => {
       window.location.href = "dashboard.html";
     });
