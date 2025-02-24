@@ -7,19 +7,27 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <style>
-    /* 追加：history セクションを相対位置にして、CSV UI を絶対配置できるように */
+    /* 1. history セクションに下余白を追加して被りを防ぐ */
     #history {
       position: relative;
+      padding-bottom: 100px; /* CSVダウンロードUI分のスペースを確保 */
     }
-    /* CSVダウンロード用UIを右下に配置 */
+    /* 2. CSVダウンロード用UIを右下に絶対配置し、被りを防ぐために z-index を上げる */
     .csv-download {
       position: absolute;
       bottom: 20px;
       right: 20px;
-      background: rgba(255, 255, 255, 0.9);
-      padding: 10px;
+      z-index: 10;
+      background: #fff; /* 透過ではなく白にして視認性アップ */
+      padding: 12px 16px;
       border-radius: 8px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    .csv-download label {
+      margin-right: 8px;
+    }
+    .csv-download select {
+      margin-right: 8px;
     }
   </style>
 </head>
@@ -30,6 +38,7 @@
     </header>
     <section id="history">
       <h2>過去の打刻記録（直近30日）</h2>
+      
       <table>
         <thead>
           <tr>
@@ -42,7 +51,8 @@
         <tbody id="historyTableBody"></tbody>
       </table>
       <button id="backToDashboardBtn">戻る</button>
-      <!-- CSVダウンロード用UI：右下に配置 -->
+      
+      <!-- 3. CSVダウンロード用UIを右下に絶対配置 -->
       <div class="csv-download">
         <label for="monthSelect">ダウンロード対象:</label>
         <select id="monthSelect">
@@ -81,7 +91,8 @@
     window.onload = () => {
       const user = localStorage.getItem("currentUser");
       if (!user) {
-        window.location.href = "index.html"; // トップページ（ログイン画面）が index.html の場合
+        // ログイン画面が index.html の場合
+        window.location.href = "index.html";
       } else {
         currentUser = JSON.parse(user);
         loadHistoryRecords();
@@ -201,6 +212,7 @@
         });
     });
     
+    // 戻るボタン処理
     backToDashboardBtn.addEventListener("click", () => {
       window.location.href = "dashboard.html";
     });
