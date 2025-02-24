@@ -3,65 +3,63 @@
 <head>
   <meta charset="UTF-8">
   <title>勤怠管理システム</title>
+  <link rel="stylesheet" href="style.css">
   <!-- Firebase SDK: Firestore と初期化用 -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    .hidden { display: none; }
-    input { padding: 8px; font-size: 16px; }
-    button { padding: 10px 20px; font-size: 16px; margin-top: 10px; }
-    #login, #dashboard, #history { margin-bottom: 30px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-    table, th, td { border: 1px solid #ccc; }
-    th, td { padding: 8px; text-align: center; }
-  </style>
 </head>
 <body>
-  <!-- ログイン画面 -->
-  <div id="login">
-    <h2>ログイン</h2>
-    <input type="text" id="employeeNumber" placeholder="社員番号"><br><br>
-    <input type="password" id="password" placeholder="パスワード"><br><br>
-    <button id="loginBtn">ログイン</button>
-    <button id="registerBtn">新規登録</button>
-    <div id="loginError" style="color: red;"></div>
-  </div>
+  <div class="container">
+    <header>
+      <h1>勤怠管理システム</h1>
+    </header>
 
-  <!-- ダッシュボード（打刻・当日記録） -->
-  <div id="dashboard" class="hidden">
-    <div style="display:flex; justify-content: space-between; align-items: center;">
-      <span id="userInfo"></span>
-      <button id="logoutBtn">ログアウト</button>
-    </div>
-    <h2>今日の打刻</h2>
-    <div id="punchStatus"></div>
-    <!-- 出勤ボタンと退勤ボタンを個別に用意 -->
-    <button id="clockInBtn">出勤</button>
-    <button id="clockOutBtn" disabled>退勤</button>
-    <div id="todayRecords">
-      <h3>当日の記録</h3>
-      <ul id="recordList"></ul>
-    </div>
-    <div id="workDuration" style="font-weight: bold; margin-top: 10px;"></div>
-    <button id="showHistoryBtn">過去の記録を見る</button>
-  </div>
+    <!-- ログインセクション -->
+    <section id="login">
+      <h2>ログイン</h2>
+      <input type="text" id="employeeNumber" placeholder="社員番号">
+      <input type="password" id="password" placeholder="パスワード">
+      <button id="loginBtn">ログイン</button>
+      <button id="registerBtn">新規登録</button>
+      <div id="loginError" class="error"></div>
+    </section>
 
-  <!-- 過去の記録（履歴） -->
-  <div id="history" class="hidden">
-    <h2>過去の打刻記録（直近30日）</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>日付</th>
-          <th>出勤時刻</th>
-          <th>退勤時刻</th>
-          <th>勤務時間</th>
-        </tr>
-      </thead>
-      <tbody id="historyTableBody"></tbody>
-    </table>
-    <button id="backToDashboardBtn">戻る</button>
+    <!-- ダッシュボード -->
+    <section id="dashboard" class="hidden">
+      <div class="top-bar">
+        <span id="userInfo"></span>
+        <button id="logoutBtn">ログアウト</button>
+      </div>
+      <h2>今日の打刻</h2>
+      <div id="punchStatus"></div>
+      <div class="button-group">
+        <button id="clockInBtn">出勤</button>
+        <button id="clockOutBtn" disabled>退勤</button>
+      </div>
+      <div id="todayRecords">
+        <h3>当日の記録</h3>
+        <ul id="recordList"></ul>
+      </div>
+      <div id="workDuration"></div>
+      <button id="showHistoryBtn">過去の記録を見る</button>
+    </section>
+
+    <!-- 履歴セクション -->
+    <section id="history" class="hidden">
+      <h2>過去の打刻記録（直近30日）</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>日付</th>
+            <th>出勤時刻</th>
+            <th>退勤時刻</th>
+            <th>勤務時間</th>
+          </tr>
+        </thead>
+        <tbody id="historyTableBody"></tbody>
+      </table>
+      <button id="backToDashboardBtn">戻る</button>
+    </section>
   </div>
 
   <script>
@@ -76,7 +74,6 @@
       measurementId: "G-TZKSMNH7HZ"
     };
 
-    // Firebase 初期化
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
@@ -100,12 +97,11 @@
     const workDurationDiv = document.getElementById('workDuration');
     const historyTableBody = document.getElementById('historyTableBody');
 
-    // 現在のユーザー情報（例：{ employeeNumber: "12345" }）を管理
     let currentUser = null;
-    // 当日の打刻記録。各要素に { type, timestamp, id, originalTimestamp (任意) } を含む
+    // 当日の打刻記録（各要素に { type, timestamp, id, originalTimestamp (任意) } を含む）
     let todayPunches = [];
 
-    // セッション管理（localStorage を利用）
+    // セッション管理
     function loadSession() {
       const storedUser = localStorage.getItem("currentUser");
       if (storedUser) {
@@ -113,17 +109,14 @@
         showDashboard();
       }
     }
-
     function saveSession() {
       localStorage.setItem("currentUser", JSON.stringify(currentUser));
     }
-
     function clearSession() {
       localStorage.removeItem("currentUser");
       currentUser = null;
     }
 
-    // UI 表示の切り替え
     function showDashboard() {
       loginDiv.classList.add('hidden');
       dashboardDiv.classList.remove('hidden');
@@ -131,14 +124,13 @@
       userInfoSpan.textContent = "社員番号: " + currentUser.employeeNumber;
       loadTodayRecords();
     }
-
     function showLogin() {
       loginDiv.classList.remove('hidden');
       dashboardDiv.classList.add('hidden');
       historyDiv.classList.add('hidden');
     }
 
-    // ログイン処理（Firestore の users コレクションから検証）
+    // ログイン処理
     loginBtn.addEventListener('click', () => {
       const employeeNumber = employeeNumberInput.value.trim();
       const password = passwordInput.value;
@@ -146,12 +138,10 @@
         loginErrorDiv.textContent = "社員番号とパスワードを入力してください。";
         return;
       }
-      // 「users」コレクションのドキュメントID を社員番号として利用
       db.collection("users").doc(employeeNumber).get()
         .then(doc => {
           if (doc.exists) {
             const userData = doc.data();
-            // パスワードチェック（※本番では必ずハッシュ化を検討してください）
             if (userData.password === password) {
               currentUser = { employeeNumber: employeeNumber };
               saveSession();
@@ -177,13 +167,11 @@
         loginErrorDiv.textContent = "社員番号とパスワードを入力してください。";
         return;
       }
-      // ユーザーの存在確認
       db.collection("users").doc(employeeNumber).get()
         .then(doc => {
           if (doc.exists) {
             loginErrorDiv.textContent = "この社員番号は既に登録されています。";
           } else {
-            // ユーザー登録（平文で保存していますが、実際はハッシュ化が必要です）
             db.collection("users").doc(employeeNumber).set({
               employeeNumber: employeeNumber,
               password: password
@@ -205,57 +193,41 @@
         });
     });
 
-    // ログアウト処理
     logoutBtn.addEventListener('click', () => {
       clearSession();
       showLogin();
     });
 
-    // 出勤ボタン処理（出勤ボタンは常に有効）
+    // 出勤ボタン処理
     clockInBtn.addEventListener('click', () => {
       if (!currentUser) return;
-      // 当日の出勤レコードを取得
       let clockInRecord = todayPunches.find(record => record.type === "clockIn");
       const now = new Date();
       if (clockInRecord) {
-        // すでに出勤打刻がある場合は、確認後に更新
         if (confirm("すでに出勤打刻があります。本当に更新しますか？")) {
-          let updateData = {
-            timestamp: firebase.firestore.Timestamp.fromDate(now)
-          };
-          // 初回更新の場合、originalTimestamp に更新前の値を保存
+          let updateData = { timestamp: firebase.firestore.Timestamp.fromDate(now) };
           if (!clockInRecord.originalTimestamp) {
             updateData.originalTimestamp = clockInRecord.timestamp;
           }
           db.collection("punchRecords").doc(clockInRecord.id).update(updateData)
-            .then(() => {
-              loadTodayRecords();
-            })
-            .catch(err => {
-              console.error("出勤打刻更新エラー: ", err);
-            });
+            .then(loadTodayRecords)
+            .catch(err => { console.error("出勤打刻更新エラー: ", err); });
         }
       } else {
-        // 出勤レコードがなければ新規追加
         const record = {
           userId: currentUser.employeeNumber,
           timestamp: firebase.firestore.Timestamp.fromDate(now),
           type: "clockIn"
         };
         db.collection("punchRecords").add(record)
-          .then(() => {
-            loadTodayRecords();
-          })
-          .catch(err => {
-            console.error("出勤打刻エラー: ", err);
-          });
+          .then(loadTodayRecords)
+          .catch(err => { console.error("出勤打刻エラー: ", err); });
       }
     });
 
     // 退勤ボタン処理
     clockOutBtn.addEventListener('click', () => {
       if (!currentUser) return;
-      // 退勤打刻の場合、まず出勤があるか確認
       let clockInRecord = todayPunches.find(record => record.type === "clockIn");
       if (!clockInRecord) {
         alert("まだ出勤打刻がありません。");
@@ -264,40 +236,27 @@
       let clockOutRecord = todayPunches.find(record => record.type === "clockOut");
       const now = new Date();
       if (clockOutRecord) {
-        // すでに退勤打刻がある場合は、更新確認をする
         if (confirm("すでに退勤打刻があります。本当に更新しますか？")) {
-          let updateData = {
-            timestamp: firebase.firestore.Timestamp.fromDate(now)
-          };
+          let updateData = { timestamp: firebase.firestore.Timestamp.fromDate(now) };
           if (!clockOutRecord.originalTimestamp) {
             updateData.originalTimestamp = clockOutRecord.timestamp;
           }
           db.collection("punchRecords").doc(clockOutRecord.id).update(updateData)
-            .then(() => {
-              loadTodayRecords();
-            })
-            .catch(err => {
-              console.error("退勤打刻更新エラー: ", err);
-            });
+            .then(loadTodayRecords)
+            .catch(err => { console.error("退勤打刻更新エラー: ", err); });
         }
       } else {
-        // 新規で退勤レコードを追加
         const record = {
           userId: currentUser.employeeNumber,
           timestamp: firebase.firestore.Timestamp.fromDate(now),
           type: "clockOut"
         };
         db.collection("punchRecords").add(record)
-          .then(() => {
-            loadTodayRecords();
-          })
-          .catch(err => {
-            console.error("退勤打刻エラー: ", err);
-          });
+          .then(loadTodayRecords)
+          .catch(err => { console.error("退勤打刻エラー: ", err); });
       }
     });
 
-    // 当日の記録を取得
     function loadTodayRecords() {
       if (!currentUser) return;
       const startOfDay = new Date();
@@ -312,9 +271,8 @@
           recordList.innerHTML = "";
           snapshot.forEach(doc => {
             let data = doc.data();
-            data.id = doc.id; // ドキュメントIDを保持
+            data.id = doc.id;
             todayPunches.push(data);
-            // ここで、originalTimestamp がある場合は更新前と更新後の行を分けて表示
             if (data.originalTimestamp) {
               let liOriginal = document.createElement("li");
               liOriginal.textContent = (data.type === "clockIn" ? "出勤: " : "退勤: ") + data.originalTimestamp.toDate().toLocaleTimeString();
@@ -332,15 +290,11 @@
         });
     }
 
-    // 打刻ボタンの状態および勤務時間表示更新
     function updatePunchStatus() {
-      // 出勤ボタンは常に有効
       clockInBtn.disabled = false;
-      
       let clockOutRecord = todayPunches.find(record => record.type === "clockOut");
       let clockInRecord = todayPunches.find(record => record.type === "clockIn");
       if (clockOutRecord) {
-        // 退勤がある場合、退勤ボタンは常に更新可能
         clockOutBtn.disabled = false;
         punchStatusDiv.textContent = "退勤打刻済み: " + clockOutRecord.timestamp.toDate().toLocaleTimeString();
         if (clockInRecord) {
@@ -361,14 +315,12 @@
       }
     }
 
-    // 履歴画面への切り替え
     showHistoryBtn.addEventListener('click', () => {
       dashboardDiv.classList.add('hidden');
       historyDiv.classList.remove('hidden');
       loadHistoryRecords();
     });
 
-    // 過去30日分の記録を取得（日単位で集計）
     function loadHistoryRecords() {
       if (!currentUser) return;
       const pastDate = new Date();
@@ -407,13 +359,11 @@
         });
     }
 
-    // 履歴画面からダッシュボードへ戻る
     backToDashboardBtn.addEventListener('click', () => {
       historyDiv.classList.add('hidden');
       dashboardDiv.classList.remove('hidden');
     });
 
-    // ページ読み込み時にセッション確認
     window.onload = loadSession;
   </script>
 </body>
