@@ -14,13 +14,12 @@
       text-align: center;
       margin-bottom: 20px;
     }
+
     /* カスタムモーダル用スタイル */
     .modal-overlay {
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
       background-color: rgba(0, 0, 0, 0.5);
       display: none; /* 初期状態は非表示 */
       justify-content: center;
@@ -30,22 +29,57 @@
     .modal-overlay.active {
       display: flex; /* activeクラスが付与されたら表示 */
     }
+
+    /* 
+      モーダル本体:
+      幅を 90% にしつつ、最大幅を 600px に制限。
+      スマホでもPCでも見やすいサイズになります。
+    */
     .modal-content {
       background: #fff;
-      padding: 16px 24px;
-      border-radius: 8px;
+      padding: 24px;
+      border-radius: 12px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-      max-width: 300px;
+      width: 90%;        /* 画面幅の90%を使用 */
+      max-width: 600px;  /* ただし最大600pxまで */
       text-align: center;
     }
+
     .modal-content p {
-      font-size: 16px;
-      margin-bottom: 20px;
+      font-size: 18px;    /* テキストも少し大きめに */
+      margin-bottom: 24px; 
+      line-height: 1.5;   /* 行間もやや広げる */
     }
+
     .modal-buttons {
       display: flex;
       justify-content: center;
-      gap: 16px;
+      gap: 24px;
+    }
+
+    /* ボタンも少し大きめに */
+    #modalOkBtn, #modalCancelBtn {
+      font-size: 18px;
+      padding: 12px 20px;
+      border-radius: 8px;
+    }
+
+    /*
+      画面幅が768px以上の場合、さらに余裕があるので
+      モーダルの幅や文字サイズを少し拡大
+    */
+    @media (min-width: 768px) {
+      .modal-content {
+        padding: 32px;
+        max-width: 700px;
+      }
+      .modal-content p {
+        font-size: 20px;
+      }
+      #modalOkBtn, #modalCancelBtn {
+        font-size: 20px;
+        padding: 14px 24px;
+      }
     }
   </style>
 </head>
@@ -142,7 +176,7 @@
 
     // カスタムモーダル表示関数（innerHTMLで改行タグを解釈）
     function showCustomModal(message, onOk, onCancel) {
-      modalMessage.innerHTML = message; // innerHTMLに変更
+      modalMessage.innerHTML = message; // innerHTMLを使うと <br> が使える
       modalOverlay.classList.add("active");
 
       modalOkBtn.onclick = () => {
@@ -161,7 +195,7 @@
       const now = new Date();
       let clockInRecord = todayPunches.find(record => record.type === "clockIn");
       if (clockInRecord) {
-        // 改行を入れるには <br> タグを使う
+        // 改行を入れたい場合は <br> タグを使用
         showCustomModal(
           "すでに出勤打刻があります。<br>本当に更新しますか？",
           () => {
@@ -196,7 +230,6 @@
       }
       let clockOutRecord = todayPunches.find(record => record.type === "clockOut");
       if (clockOutRecord) {
-        // 退勤打刻のメッセージにも改行を入れる場合
         showCustomModal(
           "すでに退勤打刻があります。<br>本当に更新しますか？",
           () => {
