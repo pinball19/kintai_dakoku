@@ -226,44 +226,57 @@ const firebaseConfig = {
       recordsTableBody.innerHTML = "";
       // 検索条件を取得
       const empNo = searchEmployeeNumberInput.value.trim();
-      const startDate = startDateInput.value ? new Date(startDateInput.value) : null;
-      const endDate = endDateInput.value ? new Date(endDateInput.value) : null;
+      const startDateVal = startDateInput.value;
+      const endDateVal = endDateInput.value;
       const sortOption = sortSelect.value;
 
       let baseQuery = db.collection("punchRecords");
 
+      // 社員番号フィルタ
       if (empNo) {
         baseQuery = baseQuery.where("userId", "==", empNo);
       }
 
-      if (startDate) {
+      // 日付範囲フィルタ
+      let useDateFilter = false;
+      if (startDateVal) {
+        useDateFilter = true;
+        const startDate = new Date(startDateVal);
         startDate.setHours(0,0,0,0);
         baseQuery = baseQuery.where("timestamp", ">=", firebase.firestore.Timestamp.fromDate(startDate));
       }
-      if (endDate) {
+      if (endDateVal) {
+        useDateFilter = true;
+        const endDate = new Date(endDateVal);
         endDate.setHours(24,0,0,0);
         baseQuery = baseQuery.where("timestamp", "<", firebase.firestore.Timestamp.fromDate(endDate));
       }
 
+      // 並べ替えロジック
+      // Firestoreの制約: 範囲フィルタがある場合、最初の orderBy はそのフィールド (timestamp) でなければならない。
+      // よって、最初に timestamp を orderBy し、2つ目に userId を orderBy する形に統一する。
+      // 複合インデックス (timestamp asc, userId asc) と (timestamp desc, userId desc) を作っておくとエラーが出ません。
       switch (sortOption) {
         case "userIdAsc":
-          baseQuery = baseQuery.orderBy("userId", "asc");
+          // 最初に timestamp、同じ方向で userId
+          baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
           break;
         case "userIdDesc":
-          baseQuery = baseQuery.orderBy("userId", "desc");
+          baseQuery = baseQuery.orderBy("timestamp", "desc").orderBy("userId", "desc");
           break;
         case "dateAsc":
-          baseQuery = baseQuery.orderBy("timestamp", "asc");
+          baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
           break;
         case "dateDesc":
-          baseQuery = baseQuery.orderBy("timestamp", "desc");
+          baseQuery = baseQuery.orderBy("timestamp", "desc").orderBy("userId", "desc");
           break;
         default:
-          baseQuery = baseQuery.orderBy("timestamp", "asc");
+          baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
       }
 
       baseQuery = baseQuery.limit(pageSize);
 
+      // ページング
       if (direction === "next" && lastVisible) {
         baseQuery = baseQuery.startAfter(lastVisible);
       } else if (direction === "prev" && prevPoint) {
@@ -290,9 +303,10 @@ const firebaseConfig = {
             const userId = data.userId || "-";
             const dateObj = data.timestamp.toDate();
             const dateStr = dateObj.toLocaleDateString();
+
+            // 出勤/退勤を1行にまとめるには集約が必要だが、ここでは1レコード=1打刻として簡易表示
             let clockIn = "";
             let clockOut = "";
-            // 勤務時間は例示として "-" とする
             let durationStr = "-";
 
             if (data.type === "clockIn") {
@@ -312,7 +326,10 @@ const firebaseConfig = {
             recordsTableBody.appendChild(row);
           });
 
+          // 次へボタン: 取得件数が pageSize 未満なら無効
           nextPageBtn.disabled = (snapshot.size < pageSize);
+
+          // 前へボタン: prevStack が空 + 今が最初のページなら無効
           prevPageBtn.disabled = (prevStack.length === 0 && direction !== "next");
         })
         .catch(err => {
