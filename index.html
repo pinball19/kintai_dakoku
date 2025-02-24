@@ -211,7 +211,7 @@
       showLogin();
     });
 
-    // 出勤ボタン処理
+    // 出勤ボタン処理（出勤ボタンは常に有効）
     clockInBtn.addEventListener('click', () => {
       if (!currentUser) return;
       // 当日の出勤レコードを取得
@@ -316,34 +316,28 @@
 
     // 打刻ボタンの状態および勤務時間表示更新
     function updatePunchStatus() {
-      let lastPunch = todayPunches[todayPunches.length - 1];
-      // 退勤が記録されている場合は、本日の打刻は完了しているので両ボタンとも無効化
-      if (todayPunches.find(record => record.type === "clockOut")) {
-        clockInBtn.disabled = true;
-        clockOutBtn.disabled = true;
-        punchStatusDiv.textContent = "本日の打刻は完了しています";
-        // 勤務時間の計算
-        const clockIn = todayPunches.find(r => r.type === "clockIn");
-        const clockOut = todayPunches.find(r => r.type === "clockOut");
-        if (clockIn && clockOut) {
-          const durationMs = clockOut.timestamp.toDate() - clockIn.timestamp.toDate();
+      // 出勤ボタンは常に有効
+      clockInBtn.disabled = false;
+      
+      let clockOutRecord = todayPunches.find(record => record.type === "clockOut");
+      let clockInRecord = todayPunches.find(record => record.type === "clockIn");
+      if (clockOutRecord) {
+        // 退勤がある場合は、退勤ボタンは更新可能（常に有効）
+        clockOutBtn.disabled = false;
+        punchStatusDiv.textContent = "退勤打刻済み: " + clockOutRecord.timestamp.toDate().toLocaleTimeString();
+        if (clockInRecord) {
+          const durationMs = clockOutRecord.timestamp.toDate() - clockInRecord.timestamp.toDate();
           const durationHours = (durationMs / (1000 * 60 * 60)).toFixed(2);
           workDurationDiv.textContent = "勤務時間: " + durationHours + " 時間";
         }
       } else {
-        // 退勤記録がない場合
-        // 出勤がまだなら出勤ボタンのみ有効
-        if (!todayPunches.find(record => record.type === "clockIn")) {
-          clockInBtn.disabled = false;
+        if (!clockInRecord) {
           clockOutBtn.disabled = true;
           punchStatusDiv.textContent = "まだ出勤打刻がありません";
           workDurationDiv.textContent = "";
         } else {
-          // 出勤打刻済みの場合は、両方とも更新可能
-          clockInBtn.disabled = false;
           clockOutBtn.disabled = false;
-          let clockInTime = todayPunches.find(r => r.type === "clockIn").timestamp.toDate().toLocaleTimeString();
-          punchStatusDiv.textContent = "出勤済み: " + clockInTime;
+          punchStatusDiv.textContent = "出勤打刻済み: " + clockInRecord.timestamp.toDate().toLocaleTimeString();
           workDurationDiv.textContent = "";
         }
       }
