@@ -314,15 +314,19 @@
             let data = doc.data();
             data.id = doc.id; // ドキュメントIDを保持
             todayPunches.push(data);
-            const li = document.createElement("li");
-            let timeString = data.timestamp.toDate().toLocaleTimeString();
-            // 更新済みの場合、更新前の時刻も表示
+            // ここで、originalTimestamp がある場合は更新前と更新後の行を分けて表示
             if (data.originalTimestamp) {
-              let originalTime = data.originalTimestamp.toDate().toLocaleTimeString();
-              timeString += " (更新: " + originalTime + ")";
+              let liOriginal = document.createElement("li");
+              liOriginal.textContent = (data.type === "clockIn" ? "出勤: " : "退勤: ") + data.originalTimestamp.toDate().toLocaleTimeString();
+              recordList.appendChild(liOriginal);
+              let liUpdated = document.createElement("li");
+              liUpdated.textContent = (data.type === "clockIn" ? "出勤: " : "退勤: ") + data.timestamp.toDate().toLocaleTimeString() + "  更新";
+              recordList.appendChild(liUpdated);
+            } else {
+              let li = document.createElement("li");
+              li.textContent = (data.type === "clockIn" ? "出勤: " : "退勤: ") + data.timestamp.toDate().toLocaleTimeString();
+              recordList.appendChild(li);
             }
-            li.textContent = (data.type === "clockIn" ? "出勤: " : "退勤: ") + timeString;
-            recordList.appendChild(li);
           });
           updatePunchStatus();
         });
@@ -336,7 +340,7 @@
       let clockOutRecord = todayPunches.find(record => record.type === "clockOut");
       let clockInRecord = todayPunches.find(record => record.type === "clockIn");
       if (clockOutRecord) {
-        // 退勤がある場合、退勤ボタンは有効（更新可能）
+        // 退勤がある場合、退勤ボタンは常に更新可能
         clockOutBtn.disabled = false;
         punchStatusDiv.textContent = "退勤打刻済み: " + clockOutRecord.timestamp.toDate().toLocaleTimeString();
         if (clockInRecord) {
