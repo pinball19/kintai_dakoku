@@ -14,6 +14,19 @@
     </header>
     <section id="history">
       <h2>過去の打刻記録（直近30日）</h2>
+      
+      <!-- CSVダウンロード用UI -->
+      <div class="csv-download">
+        <label for="monthSelect">ダウンロード対象:</label>
+        <select id="monthSelect">
+          <option value="0">今月分</option>
+          <option value="1">前月分</option>
+          <option value="2">2か月前</option>
+          <option value="3">3か月前</option>
+        </select>
+        <button id="downloadCSV">CSVダウンロード</button>
+      </div>
+      
       <table>
         <thead>
           <tr>
@@ -28,7 +41,9 @@
       <button id="backToDashboardBtn">戻る</button>
     </section>
   </div>
+  
   <script>
+    // Firebase の設定（各自のプロジェクト情報に置き換えてください）
     const firebaseConfig = {
       apiKey: "AIzaSyDzYAtr_PA8cfibICKwb3KZA6xyeNDHtjY",
       authDomain: "kintaidakoku-21454.firebaseapp.com",
@@ -40,20 +55,26 @@
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
+    
     const historyTableBody = document.getElementById("historyTableBody");
     const backToDashboardBtn = document.getElementById("backToDashboardBtn");
-
+    const downloadCSVBtn = document.getElementById("downloadCSV");
+    const monthSelect = document.getElementById("monthSelect");
+    
     let currentUser = null;
+    
+    // ログイン済みユーザー情報の確認
     window.onload = () => {
       const user = localStorage.getItem("currentUser");
       if (!user) {
-        window.location.href = "login.html";
+        window.location.href = "index.html"; // トップページ（ログイン画面）が index.html の場合
       } else {
         currentUser = JSON.parse(user);
         loadHistoryRecords();
       }
     };
-
+    
+    // 過去30日分の記録をテーブルに表示
     function loadHistoryRecords() {
       const pastDate = new Date();
       pastDate.setDate(pastDate.getDate() - 30);
@@ -85,12 +106,88 @@
               duration = (timeDiff / (1000 * 60 * 60)).toFixed(2) + " 時間";
             }
             const row = document.createElement("tr");
-            row.innerHTML = "<td>" + date + "</td><td>" + (clockIn || "-") + "</td><td>" + (clockOut || "-") + "</td><td>" + duration + "</td>";
+            row.innerHTML = `<td>${date}</td><td>${clockIn || "-"}</td><td>${clockOut || "-"}</td><td>${duration}</td>`;
             historyTableBody.appendChild(row);
           }
         });
     }
-
+    
+    // 選択された月の開始日と終了日を計算する関数
+    function getDateRange(offset) {
+      let now = new Date();
+      let year = now.getFullYear();
+      let month = now.getMonth(); // 0-indexed
+      month = month - offset;
+      while (month < 0) {
+        month += 12;
+        year -= 1;
+      }
+      let start = new Date(year, month, 1);
+      let end = new Date(year, month + 1, 1);
+      return { start, end };
+    }
+    
+    // 取得したレコードをCSV形式に変換する関数
+    function convertRecordsToCSV(records) {
+      let csv = "日付,出勤時刻,退勤時刻,勤務時間\n";
+      let recordsByDay = {};
+      records.forEach(record => {
+        let dateStr = record.timestamp.toDate().toLocaleDateString();
+        if (!recordsByDay[dateStr]) {
+          recordsByDay[dateStr] = { clockIn: null, clockOut: null };
+        }
+        if (record.type === "clockIn") {
+          recordsByDay[dateStr].clockIn = record.timestamp.toDate();
+        } else if (record.type === "clockOut") {
+          recordsByDay[dateStr].clockOut = record.timestamp.toDate();
+        }
+      });
+      for (const date in recordsByDay) {
+        const { clockIn, clockOut } = recordsByDay[date];
+        let clockInStr = clockIn ? clockIn.toLocaleTimeString() : "";
+        let clockOutStr = clockOut ? clockOut.toLocaleTimeString() : "";
+        let duration = "";
+        if (clockIn && clockOut) {
+          let diff = clockOut - clockIn;
+          duration = (diff / (1000 * 60 * 60)).toFixed(2);
+        }
+        csv += `${date},${clockInStr},${clockOutStr},${duration}\n`;
+      }
+      return csv;
+    }
+    
+    // CSVダウンロード処理
+    downloadCSVBtn.addEventListener("click", () => {
+      let offset = parseInt(monthSelect.value, 10);
+      let { start, end } = getDateRange(offset);
+      db.collection("punchRecords")
+        .where("userId", "==", currentUser.employeeNumber)
+        .where("timestamp", ">=", firebase.firestore.Timestamp.fromDate(start))
+        .where("timestamp", "<", firebase.firestore.Timestamp.fromDate(end))
+        .orderBy("timestamp", "asc")
+        .get()
+        .then(snapshot => {
+          let records = [];
+          snapshot.forEach(doc => {
+            records.push(doc.data());
+          });
+          let csvContent = convertRecordsToCSV(records);
+          const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.setAttribute("href", url);
+          link.setAttribute("download", "punch_records.csv");
+          link.style.visibility = 'hidden';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        })
+        .catch(err => {
+          console.error("CSV出力エラー:", err);
+        });
+    });
+    
+    // 戻るボタン処理
     backToDashboardBtn.addEventListener("click", () => {
       window.location.href = "dashboard.html";
     });
