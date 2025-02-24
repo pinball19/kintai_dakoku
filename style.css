@@ -1,0 +1,133 @@
+/* style.css */
+
+/* リセットと基本スタイル */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  background-color: #f5f5f7;
+  color: #1d1d1f;
+  line-height: 1.6;
+}
+
+/* コンテナ */
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* ヘッダー */
+header {
+  text-align: center;
+  padding: 20px 0;
+  border-bottom: 1px solid #d2d2d7;
+}
+
+header h1 {
+  font-size: 32px;
+  font-weight: 600;
+}
+
+/* セクション */
+section {
+  margin-top: 30px;
+  background: #fff;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 見出し */
+h2 {
+  font-size: 28px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+h3 {
+  font-size: 22px;
+  margin-bottom: 10px;
+}
+
+/* 入力フィールド */
+input[type="text"],
+input[type="password"] {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 16px;
+  border: 1px solid #d2d2d7;
+  border-radius: 8px;
+  font-size: 16px;
+}
+
+/* ボタン */
+button {
+  background-color: #0071e3;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 20px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  margin: 8px 0;
+}
+
+button:hover {
+  background-color: #005bb5;
+}
+
+button:disabled {
+  background-color: #a6a6a6;
+  cursor: not-allowed;
+}
+
+/* 上部バー */
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+/* ボタングループ */
+.button-group {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+/* リスト */
+ul {
+  list-style: none;
+}
+
+li {
+  padding: 8px 0;
+  border-bottom: 1px solid #d2d2d7;
+}
+
+/* テーブル */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+
+th, td {
+  padding: 12px;
+  border-bottom: 1px solid #d2d2d7;
+  text-align: center;
+}
+
+/* エラーメッセージ */
+.error {
+  color: red;
+  margin-top: 8px;
+}
