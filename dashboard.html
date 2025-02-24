@@ -4,12 +4,13 @@
   <meta charset="UTF-8">
   <title>勤怠管理システム - 打刻入力</title>
   <link rel="stylesheet" href="style.css">
+  <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <style>
-    /* 現在時刻の表示をボタンと同程度の大きさに */
+    /* 現在時刻の表示（ボタンと同等の大きさ） */
     .current-time {
-      font-size: 48px; /* ボタンと同程度の大きさ */
+      font-size: 48px;
       text-align: center;
       margin-bottom: 20px;
     }
@@ -25,10 +26,8 @@
         <span id="userInfo"></span>
         <button id="logoutBtn">ログアウト</button>
       </div>
-
-      <!-- ここで「今日の打刻」見出しを削除し、代わりに現在時刻を表示する要素を配置 -->
+      <!-- 現在時刻表示 -->
       <div id="currentTime" class="current-time"></div>
-
       <div class="button-group">
         <button id="clockInBtn">出勤</button>
         <button id="clockOutBtn" disabled>退勤</button>
@@ -40,8 +39,20 @@
       <button id="showHistoryBtn">過去の記録を見る</button>
     </section>
   </div>
+
+  <!-- カスタムモーダル -->
+  <div id="modalOverlay" class="modal-overlay">
+    <div class="modal-content">
+      <p id="modalMessage">ここにメッセージが入ります</p>
+      <div class="modal-buttons">
+        <button id="modalOkBtn">OK</button>
+        <button id="modalCancelBtn">キャンセル</button>
+      </div>
+    </div>
+  </div>
+
   <script>
-    // Firebaseの設定（各自のプロジェクト情報に置き換えてください）
+    // Firebase の設定（各自のプロジェクト情報に置き換えてください）
     const firebaseConfig = {
       apiKey: "AIzaSyDzYAtr_PA8cfibICKwb3KZA6xyeNDHtjY",
       authDomain: "kintaidakoku-21454.firebaseapp.com",
@@ -54,6 +65,7 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
+    // DOM要素の取得
     const logoutBtn = document.getElementById("logoutBtn");
     const userInfoSpan = document.getElementById("userInfo");
     const clockInBtn = document.getElementById("clockInBtn");
@@ -62,10 +74,20 @@
     const recordList = document.getElementById("recordList");
     const currentTimeDiv = document.getElementById("currentTime");
 
+    // カスタムモーダル関連
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modalMessage = document.getElementById("modalMessage");
+    const modalOkBtn = document.getElementById("modalOkBtn");
+    const modalCancelBtn = document.getElementById("modalCancelBtn");
+
     let currentUser = null;
     let todayPunches = [];
 
-    // ページ読み込み時にユーザー情報を確認
+    // 現在時刻の更新
+    function updateCurrentTime() {
+      const now = new Date();
+      currentTimeDiv.textContent = now.toLocaleTimeString();
+    }
     window.onload = () => {
       const user = localStorage.getItem("currentUser");
       if (!user) {
@@ -75,38 +97,49 @@
         userInfoSpan.textContent = "社員番号: " + currentUser.employeeNumber;
         loadTodayRecords();
       }
-      // 時刻表示の初期化＆1秒ごとに更新
       updateCurrentTime();
       setInterval(updateCurrentTime, 1000);
     };
 
-    // 現在時刻を表示
-    function updateCurrentTime() {
-      const now = new Date();
-      // 好みで「toLocaleTimeString()」やフォーマットを変えてもOK
-      currentTimeDiv.textContent = now.toLocaleTimeString();
-    }
-
-    // ログアウト
+    // ログアウト処理
     logoutBtn.addEventListener("click", () => {
       localStorage.removeItem("currentUser");
       window.location.href = "index.html";
     });
 
-    // 出勤ボタン
+    // カスタムモーダル表示関数
+    function showCustomModal(message, onOk, onCancel) {
+      modalMessage.textContent = message;
+      modalOverlay.classList.add("active");
+
+      modalOkBtn.onclick = () => {
+        modalOverlay.classList.remove("active");
+        if (onOk) onOk();
+      };
+
+      modalCancelBtn.onclick = () => {
+        modalOverlay.classList.remove("active");
+        if (onCancel) onCancel();
+      };
+    }
+
+    // 出勤ボタン処理（カスタムモーダルを使用）
     clockInBtn.addEventListener("click", () => {
       const now = new Date();
       let clockInRecord = todayPunches.find(record => record.type === "clockIn");
       if (clockInRecord) {
-        if (confirm("すでに出勤打刻があります。本当に更新しますか？")) {
-          let updateData = { timestamp: firebase.firestore.Timestamp.fromDate(now) };
-          if (!clockInRecord.originalTimestamp) {
-            updateData.originalTimestamp = clockInRecord.timestamp;
+        showCustomModal(
+          "すでに出勤打刻があります。本当に更新しますか？",
+          () => {
+            let updateData = { timestamp: firebase.firestore.Timestamp.fromDate(now) };
+            if (!clockInRecord.originalTimestamp) {
+              updateData.originalTimestamp = clockInRecord.timestamp;
+            }
+            db.collection("punchRecords").doc(clockInRecord.id).update(updateData)
+              .then(loadTodayRecords)
+              .catch(err => { console.error("出勤更新エラー:", err); });
           }
-          db.collection("punchRecords").doc(clockInRecord.id).update(updateData)
-            .then(loadTodayRecords)
-            .catch(err => { console.error("出勤更新エラー:", err); });
-        }
+        );
       } else {
         const record = {
           userId: currentUser.employeeNumber,
@@ -119,7 +152,7 @@
       }
     });
 
-    // 退勤ボタン
+    // 退勤ボタン処理（カスタムモーダルを使用）
     clockOutBtn.addEventListener("click", () => {
       const now = new Date();
       let clockInRecord = todayPunches.find(record => record.type === "clockIn");
@@ -129,15 +162,18 @@
       }
       let clockOutRecord = todayPunches.find(record => record.type === "clockOut");
       if (clockOutRecord) {
-        if (confirm("すでに退勤打刻があります。本当に更新しますか？")) {
-          let updateData = { timestamp: firebase.firestore.Timestamp.fromDate(now) };
-          if (!clockOutRecord.originalTimestamp) {
-            updateData.originalTimestamp = clockOutRecord.timestamp;
+        showCustomModal(
+          "すでに退勤打刻があります。本当に更新しますか？",
+          () => {
+            let updateData = { timestamp: firebase.firestore.Timestamp.fromDate(now) };
+            if (!clockOutRecord.originalTimestamp) {
+              updateData.originalTimestamp = clockOutRecord.timestamp;
+            }
+            db.collection("punchRecords").doc(clockOutRecord.id).update(updateData)
+              .then(loadTodayRecords)
+              .catch(err => { console.error("退勤更新エラー:", err); });
           }
-          db.collection("punchRecords").doc(clockOutRecord.id).update(updateData)
-            .then(loadTodayRecords)
-            .catch(err => { console.error("退勤更新エラー:", err); });
-        }
+        );
       } else {
         const record = {
           userId: currentUser.employeeNumber,
@@ -187,7 +223,7 @@
         });
     }
 
-    // ボタンの有効/無効を更新
+    // ボタンの有効/無効更新
     function updatePunchStatus() {
       clockInBtn.disabled = false;
       let clockInRecord = todayPunches.find(record => record.type === "clockIn");
@@ -203,7 +239,7 @@
       }
     }
 
-    // 履歴画面へ
+    // 履歴画面へ遷移
     showHistoryBtn.addEventListener("click", () => {
       window.location.href = "history.html";
     });
