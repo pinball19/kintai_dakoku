@@ -21,14 +21,14 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background-color: rgba(0, 0, 0, 0.5); /* 背景は半透明 */
+      background-color: rgba(0, 0, 0, 0.5);
       display: none; /* 初期状態は非表示 */
-      justify-content: center; /* 横方向中央揃え */
-      align-items: center;     /* 縦方向中央揃え */
+      justify-content: center;
+      align-items: center;
       z-index: 9999;
     }
     .modal-overlay.active {
-      display: flex;
+      display: flex; /* activeクラスが付与されたら表示 */
     }
     .modal-content {
       background: #fff;
@@ -140,9 +140,9 @@
       window.location.href = "index.html";
     });
 
-    // カスタムモーダル表示関数
+    // カスタムモーダル表示関数（innerHTMLで改行タグを解釈）
     function showCustomModal(message, onOk, onCancel) {
-      modalMessage.textContent = message;
+      modalMessage.innerHTML = message; // innerHTMLに変更
       modalOverlay.classList.add("active");
 
       modalOkBtn.onclick = () => {
@@ -161,8 +161,9 @@
       const now = new Date();
       let clockInRecord = todayPunches.find(record => record.type === "clockIn");
       if (clockInRecord) {
+        // 改行を入れるには <br> タグを使う
         showCustomModal(
-          "すでに出勤打刻があります。本当に更新しますか？",
+          "すでに出勤打刻があります。<br>本当に更新しますか？",
           () => {
             let updateData = { timestamp: firebase.firestore.Timestamp.fromDate(now) };
             if (!clockInRecord.originalTimestamp) {
@@ -195,8 +196,9 @@
       }
       let clockOutRecord = todayPunches.find(record => record.type === "clockOut");
       if (clockOutRecord) {
+        // 退勤打刻のメッセージにも改行を入れる場合
         showCustomModal(
-          "すでに退勤打刻があります。本当に更新しますか？",
+          "すでに退勤打刻があります。<br>本当に更新しますか？",
           () => {
             let updateData = { timestamp: firebase.firestore.Timestamp.fromDate(now) };
             if (!clockOutRecord.originalTimestamp) {
