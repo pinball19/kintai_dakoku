@@ -131,7 +131,6 @@
         </div>
         <div class="search-row">
           <button id="searchBtn">検索</button>
-          <!-- CSVダウンロードボタンを追加 -->
           <button id="downloadCSVBtn">CSVダウンロード</button>
         </div>
       </div>
@@ -187,8 +186,8 @@ const firebaseConfig = {
 
     let currentManager = null;
 
-    // ページング用の変数
-    const pageSize = 5;  // 1ページあたりの表示件数
+    // 1ページあたりのドキュメント数（50行）
+    const pageSize = 50; 
     let lastVisible = null;     
     let firstVisible = null;    
     let prevStack = [];         
@@ -211,138 +210,90 @@ const firebaseConfig = {
 
     // 検索ボタン押下
     searchBtn.addEventListener("click", () => {
-      // ページングリセット
       lastVisible = null;
       firstVisible = null;
       prevStack = [];
       loadRecords();
     });
 
-    // 次へボタン押下
+    // 次へボタン
     nextPageBtn.addEventListener("click", () => {
-      prevStack.push(firstVisible); // 前のページの開始点をスタックに追加
+      prevStack.push(firstVisible);
       loadRecords("next");
     });
 
-    // 前へボタン押下
+    // 前へボタン
     prevPageBtn.addEventListener("click", () => {
       const prevPoint = prevStack.pop();
       loadRecords("prev", prevPoint);
     });
 
-    // レコード読み込み関数
-    function loadRecords(direction = "init", prevPoint = null) {
+    // レコード読み込み関数（pageSize=50ドキュメント）
+    async function loadRecords(direction = "init", prevPoint = null) {
       recordsTableBody.innerHTML = "";
-      // 検索条件を取得
-      const empNo = searchEmployeeNumberInput.value.trim();
-      const startDateVal = startDateInput.value;
-      const endDateVal = endDateInput.value;
-      const sortOption = sortSelect.value;
 
-      let baseQuery = db.collection("punchRecords");
+      const { baseQuery } = buildQuery();
+      let query = baseQuery.limit(pageSize);
 
-      // 社員番号フィルタ
-      if (empNo) {
-        baseQuery = baseQuery.where("userId", "==", empNo);
-      }
-
-      // 日付範囲フィルタ
-      if (startDateVal) {
-        const startDate = new Date(startDateVal);
-        startDate.setHours(0,0,0,0);
-        baseQuery = baseQuery.where("timestamp", ">=", firebase.firestore.Timestamp.fromDate(startDate));
-      }
-      if (endDateVal) {
-        const endDate = new Date(endDateVal);
-        endDate.setHours(24,0,0,0);
-        baseQuery = baseQuery.where("timestamp", "<", firebase.firestore.Timestamp.fromDate(endDate));
-      }
-
-      // 並べ替え: timestamp を最初に orderBy
-      switch (sortOption) {
-        case "userIdAsc":
-          baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
-          break;
-        case "userIdDesc":
-          baseQuery = baseQuery.orderBy("timestamp", "desc").orderBy("userId", "desc");
-          break;
-        case "dateAsc":
-          baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
-          break;
-        case "dateDesc":
-          baseQuery = baseQuery.orderBy("timestamp", "desc").orderBy("userId", "desc");
-          break;
-        default:
-          baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
-      }
-
-      baseQuery = baseQuery.limit(pageSize);
-
-      // ページング
       if (direction === "next" && lastVisible) {
-        baseQuery = baseQuery.startAfter(lastVisible);
+        query = query.startAfter(lastVisible);
       } else if (direction === "prev" && prevPoint) {
-        baseQuery = baseQuery.endBefore(prevPoint).limitToLast(pageSize);
+        query = query.endBefore(prevPoint).limitToLast(pageSize);
       }
 
-      baseQuery.get()
-        .then(snapshot => {
-          if (snapshot.empty) {
-            if (direction === "next") {
-              alert("これ以上のデータはありません。");
-            } else if (direction === "prev") {
-              alert("前のページはありません。");
-            }
-            return;
-          }
-          let firstDoc = snapshot.docs[0];
-          let lastDoc = snapshot.docs[snapshot.docs.length - 1];
-          firstVisible = firstDoc;
-          lastVisible = lastDoc;
+      const snapshot = await query.get();
+      if (snapshot.empty) {
+        if (direction === "next") {
+          alert("これ以上のデータはありません。");
+        } else if (direction === "prev") {
+          alert("前のページはありません。");
+        }
+        return;
+      }
 
-          snapshot.forEach(doc => {
-            const data = doc.data();
-            const userId = data.userId || "-";
-            const dateObj = data.timestamp.toDate();
-            const dateStr = dateObj.toLocaleDateString();
-            let clockIn = "";
-            let clockOut = "";
-            let durationStr = "-";
+      let firstDoc = snapshot.docs[0];
+      let lastDoc = snapshot.docs[snapshot.docs.length - 1];
+      firstVisible = firstDoc;
+      lastVisible = lastDoc;
 
-            if (data.type === "clockIn") {
-              clockIn = dateObj.toLocaleTimeString();
-            } else if (data.type === "clockOut") {
-              clockOut = dateObj.toLocaleTimeString();
-            }
+      // ★ 同日打刻をグループ化
+      let grouped = groupPunchRecords(snapshot);
 
-            const row = document.createElement("tr");
-            row.innerHTML = `
-              <td>${userId}</td>
-              <td>${dateStr}</td>
-              <td>${clockIn || "-"}</td>
-              <td>${clockOut || "-"}</td>
-              <td>${durationStr}</td>
-            `;
-            recordsTableBody.appendChild(row);
-          });
+      // 表示用テーブルに反映
+      renderGroupedRecords(grouped);
 
-          nextPageBtn.disabled = (snapshot.size < pageSize);
-          prevPageBtn.disabled = (prevStack.length === 0 && direction !== "next");
-        })
-        .catch(err => {
-          console.error("レコード取得エラー:", err);
-        });
+      nextPageBtn.disabled = (snapshot.size < pageSize);
+      prevPageBtn.disabled = (prevStack.length === 0 && direction !== "next");
     }
 
-    // CSVダウンロードボタン押下
-    downloadCSVBtn.addEventListener("click", () => {
-      downloadCSV();
+    // CSVダウンロード
+    downloadCSVBtn.addEventListener("click", async () => {
+      // 検索・ソート条件は同じだが、全件取得する例
+      // 大量データの場合は要注意
+      const { baseQuery } = buildQuery();
+      const snapshot = await baseQuery.get();
+      if (snapshot.empty) {
+        alert("ダウンロード対象のデータがありません。");
+        return;
+      }
+
+      let grouped = groupPunchRecords(snapshot);
+      let csvContent = buildCSV(grouped);
+
+      // Blobを生成し、ダウンロード
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", "punch_records.csv");
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     });
 
-    // CSVダウンロード処理
-    function downloadCSV() {
-      // 検索・フィルタ・ソートの条件を再取得し、全件（上限なし）でクエリ
-      // ※ データ量が多いとクエリサイズの制限に当たる可能性があるので注意
+    // クエリ生成（検索・ソート）
+    function buildQuery() {
       let empNo = searchEmployeeNumberInput.value.trim();
       let startDateVal = startDateInput.value;
       let endDateVal = endDateInput.value;
@@ -354,17 +305,18 @@ const firebaseConfig = {
         baseQuery = baseQuery.where("userId", "==", empNo);
       }
       if (startDateVal) {
-        const startDate = new Date(startDateVal);
-        startDate.setHours(0,0,0,0);
-        baseQuery = baseQuery.where("timestamp", ">=", firebase.firestore.Timestamp.fromDate(startDate));
+        const sDate = new Date(startDateVal);
+        sDate.setHours(0,0,0,0);
+        baseQuery = baseQuery.where("timestamp", ">=", firebase.firestore.Timestamp.fromDate(sDate));
       }
       if (endDateVal) {
-        const endDate = new Date(endDateVal);
-        endDate.setHours(24,0,0,0);
-        baseQuery = baseQuery.where("timestamp", "<", firebase.firestore.Timestamp.fromDate(endDate));
+        const eDate = new Date(endDateVal);
+        eDate.setHours(24,0,0,0);
+        baseQuery = baseQuery.where("timestamp", "<", firebase.firestore.Timestamp.fromDate(eDate));
       }
 
-      // 並べ替え: timestamp → userId
+      // Firestoreの制約: 最初の orderBy は timestamp
+      // 2つ目に userId を orderBy
       switch (sortOption) {
         case "userIdAsc":
           baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
@@ -382,51 +334,98 @@ const firebaseConfig = {
           baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
       }
 
-      // ここでは .limit() を付けずに全件取得する例
-      // 大量データの場合は注意
-      baseQuery.get().then(snapshot => {
-        if (snapshot.empty) {
-          alert("ダウンロード対象のデータがありません。");
-          return;
+      return { baseQuery };
+    }
+
+    // ★ 同日打刻のグループ化処理
+    function groupPunchRecords(snapshot) {
+      // キー: "userId_YYYY/MM/DD"
+      // 値: { userId, dateStr, clockIn(最初), clockOut(最後) }
+      let mapKeyToObj = {};
+      let grouped = [];
+
+      snapshot.forEach(doc => {
+        let data = doc.data();
+        let userId = data.userId || "-";
+        let dateObj = data.timestamp.toDate();
+        let dateStr = dateObj.toLocaleDateString(); // "YYYY/MM/DD"など
+
+        // グループキー
+        let key = userId + "_" + dateStr;
+
+        // 初回ならオブジェクト作成
+        if (!mapKeyToObj[key]) {
+          mapKeyToObj[key] = {
+            userId: userId,
+            dateStr: dateStr,
+            clockIn: null,
+            clockOut: null
+          };
+          grouped.push(mapKeyToObj[key]);
         }
+        let rec = mapKeyToObj[key];
 
-        // CSV用のヘッダー行
-        let csv = "社員番号,日付,出勤時刻,退勤時刻,勤務時間\n";
-
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          const userId = data.userId || "-";
-          const dateObj = data.timestamp.toDate();
-          const dateStr = dateObj.toLocaleDateString();
-          let clockIn = "";
-          let clockOut = "";
-          let durationStr = "-";
-
-          if (data.type === "clockIn") {
-            clockIn = dateObj.toLocaleTimeString();
-          } else if (data.type === "clockOut") {
-            clockOut = dateObj.toLocaleTimeString();
+        // 出勤は最初のもの、退勤は最後のものを使う例
+        if (data.type === "clockIn") {
+          if (!rec.clockIn) {
+            rec.clockIn = dateObj;
+          } else {
+            // より早い時間があれば更新
+            if (dateObj < rec.clockIn) {
+              rec.clockIn = dateObj;
+            }
           }
-
-          // CSV 1行を生成
-          // ダブルクォートやカンマのエスケープが必要な場合もあるが、簡易例とする
-          csv += `${userId},${dateStr},${clockIn},${clockOut},${durationStr}\n`;
-        });
-
-        // Blobを生成し、ダウンロードリンクを作成
-        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.setAttribute("href", url);
-        link.setAttribute("download", "punch_records.csv");
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      })
-      .catch(err => {
-        console.error("CSVダウンロードエラー:", err);
+        } else if (data.type === "clockOut") {
+          if (!rec.clockOut) {
+            rec.clockOut = dateObj;
+          } else {
+            // より遅い時間があれば更新
+            if (dateObj > rec.clockOut) {
+              rec.clockOut = dateObj;
+            }
+          }
+        }
       });
+
+      // grouped配列はsnapshotの順序と同じ順で生成されるが、さらに
+      // userId + dateStr の並び替えをしたい場合はここで sort() も可能
+      // ただし既に orderBy しているので概ね順序は整合します
+
+      return grouped;
+    }
+
+    // テーブル表示
+    function renderGroupedRecords(grouped) {
+      recordsTableBody.innerHTML = "";
+      grouped.forEach(obj => {
+        let clockInStr = obj.clockIn ? obj.clockIn.toLocaleTimeString() : "-";
+        let clockOutStr = obj.clockOut ? obj.clockOut.toLocaleTimeString() : "-";
+        let durationStr = "-"; // 必要なら計算
+
+        let row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${obj.userId}</td>
+          <td>${obj.dateStr}</td>
+          <td>${clockInStr}</td>
+          <td>${clockOutStr}</td>
+          <td>${durationStr}</td>
+        `;
+        recordsTableBody.appendChild(row);
+      });
+    }
+
+    // CSV用文字列生成
+    function buildCSV(grouped) {
+      let csv = "社員番号,日付,出勤時刻,退勤時刻,勤務時間\n";
+      grouped.forEach(obj => {
+        let clockInStr = obj.clockIn ? obj.clockIn.toLocaleTimeString() : "";
+        let clockOutStr = obj.clockOut ? obj.clockOut.toLocaleTimeString() : "";
+        let durationStr = ""; // 必要なら計算
+
+        // カンマ区切り1行
+        csv += `${obj.userId},${obj.dateStr},${clockInStr},${clockOutStr},${durationStr}\n`;
+      });
+      return csv;
     }
   </script>
 </body>
