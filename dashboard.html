@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>勤怠管理システム - 打刻入力</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>勤怠管理システム</h1>
+    </header>
+    <section id="dashboard">
+      <div class="top-bar">
+        <span id="userInfo"></span>
+        <button id="logoutBtn">ログアウト</button>
+      </div>
+      <h2>今日の打刻</h2>
+      <div id="punchStatus"></div>
+      <div class="button-group">
+        <button id="clockInBtn">出勤</button>
+        <button id="clockOutBtn" disabled>退勤</button>
+      </div>
+      <div id="todayRecords">
+        <h3>当日の記録</h3>
+        <ul id="recordList"></ul>
+      </div>
+      <div id="workDuration"></div>
+      <button id="showHistoryBtn">過去の記録を見る</button>
+    </section>
+  </div>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyDzYAtr_PA8cfibICKwb3KZA6xyeNDHtjY",
+      authDomain: "kintaidakoku-21454.firebaseapp.com",
+      projectId: "kintaidakoku-21454",
+      storageBucket: "kintaidakoku-21454.firebasestorage.app",
+      messagingSenderId: "185561108336",
+      appId: "1:185561108336:web:a5eab6de7a713a946a49b5",
+      measurementId: "G-TZKSMNH7HZ"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const logoutBtn = document.getElementById("logoutBtn");
+    const userInfoSpan = document.getElementById("userInfo");
+    const clockInBtn = document.getElementById("clockInBtn");
+    const clockOutBtn = document.getElementById("clockOutBtn");
+    const showHistoryBtn = document.getElementById("showHistoryBtn");
+    const recordList = document.getElementById("recordList");
+    const punchStatusDiv = document.getElementById("punchStatus");
+    const workDurationDiv = document.getElementById("workDuration");
+
+    let currentUser = null;
+    let todayPunches = [];
+
+    window.onload = () => {
+      const user = localStorage.getItem("currentUser");
+      if (!user) {
+        window.location.href = "login.html";
+      } else {
+        currentUser = JSON.parse(user);
+        userInfoSpan.textContent = "社員番号: " + currentUser.employeeNumber;
+        loadTodayRecords();
+      }
+    };
+
+    logoutBtn.addEventListener("click", () => {
+      localStorage.removeItem("currentUser");
+      window.location.href = "login.html";
+    });
+
+    clockInBtn.addEventListener("click", () => {
+      const now = new Date();
+      let clockInRecord = todayPunches.find(record => record.type === "clockIn");
+      if (clockInRecord) {
+        if (confirm("すでに出勤打刻があります。本当に更新しますか？")) {
+          let updateData = { timestamp: firebase.firestore.Timestamp.fromDate(now) };
+          if (!clockInRecord.originalTimestamp) {
+            updateData.originalTimestamp = clockInRecord.timestamp;
+          }
+          db.collection("punchRecords").doc(clockInRecord.id).update(updateData)
+            .then(loadTodayRecords)
+            .catch(err => { console.error("出勤更新エラー:", err); });
+        }
+      } else {
+        const record = {
+          userId: currentUser.employeeNumber,
+          timestamp: firebase.firestore.Timestamp.fromDate(now),
+          type: "clockIn"
+        };
+        db.collection("punchRecords").add(record)
+          .then(loadTodayRecords)
+          .catch(err => { console.error("出勤追加エラー:", err); });
+      }
+    });
+
+    clockOutBtn.addEventListener("click", () => {
+      const now = new Date();
+      let clockInRecord = todayPunches.find(record => record.type === "clockIn");
+      if (!clockInRecord) {
+        alert("まだ出勤打刻がありません。");
+        return;
+      }
+      let clockOutRecord = todayPunches.find(record => record.type === "clockOut");
+      if (clockOutRecord) {
+        if (confirm("すでに退勤打刻があります。本当に更新しますか？")) {
+          let updateData = { timestamp: firebase.firestore.Timestamp.fromDate(now) };
+          if (!clockOutRecord.originalTimestamp) {
+            updateData.originalTimestamp = clockOutRecord.timestamp;
+          }
+          db.collection("punchRecords").doc(clockOutRecord.id).update(updateData)
+            .then(loadTodayRecords)
+            .catch(err => { console.error("退勤更新エラー:", err); });
+        }
+      } else {
+        const record = {
+          userId: currentUser.employeeNumber,
+          timestamp: firebase.firestore.Timestamp.fromDate(now),
+          type: "clockOut"
+        };
+        db.collection("punchRecords").add(record)
+          .then(loadTodayRecords)
+          .catch(err => { console.error("退勤追加エラー:", err); });
+      }
+    });
+
+    function loadTodayRecords() {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      db.collection("punchRecords")
+        .where("userId", "==", currentUser.employeeNumber)
+        .where("timestamp", ">=", firebase.firestore.Timestamp.fromDate(startOfDay))
+        .orderBy("timestamp", "asc")
+        .get()
+        .then(snapshot => {
+          todayPunches = [];
+          recordList.innerHTML = "";
+          snapshot.forEach(doc => {
+            let data = doc.data();
+            data.id = doc.id;
+            todayPunches.push(data);
+            if (data.originalTimestamp) {
+              let liOriginal = document.createElement("li");
+              liOriginal.textContent = (data.type === "clockIn" ? "出勤: " : "退勤: ") + data.originalTimestamp.toDate().toLocaleTimeString();
+              recordList.appendChild(liOriginal);
+              let liUpdated = document.createElement("li");
+              liUpdated.textContent = (data.type === "clockIn" ? "出勤: " : "退勤: ") + data.timestamp.toDate().toLocaleTimeString() + "  更新";
+              recordList.appendChild(liUpdated);
+            } else {
+              let li = document.createElement("li");
+              li.textContent = (data.type === "clockIn" ? "出勤: " : "退勤: ") + data.timestamp.toDate().toLocaleTimeString();
+              recordList.appendChild(li);
+            }
+          });
+          updatePunchStatus();
+        });
+    }
+
+    function updatePunchStatus() {
+      clockInBtn.disabled = false;
+      let clockInRecord = todayPunches.find(record => record.type === "clockIn");
+      let clockOutRecord = todayPunches.find(record => record.type === "clockOut");
+      if (clockOutRecord) {
+        clockOutBtn.disabled = false;
+        punchStatusDiv.textContent = "退勤打刻済み: " + clockOutRecord.timestamp.toDate().toLocaleTimeString();
+        if (clockInRecord) {
+          const durationMs = clockOutRecord.timestamp.toDate() - clockInRecord.timestamp.toDate();
+          const durationHours = (durationMs / (1000 * 60 * 60)).toFixed(2);
+          workDurationDiv.textContent = "勤務時間: " + durationHours + " 時間";
+        }
+      } else {
+        if (!clockInRecord) {
+          clockOutBtn.disabled = true;
+          punchStatusDiv.textContent = "まだ出勤打刻がありません";
+          workDurationDiv.textContent = "";
+        } else {
+          clockOutBtn.disabled = false;
+          punchStatusDiv.textContent = "出勤打刻済み: " + clockInRecord.timestamp.toDate().toLocaleTimeString();
+          workDurationDiv.textContent = "";
+        }
+      }
+    }
+
+    showHistoryBtn.addEventListener("click", () => {
+      window.location.href = "history.html";
+    });
+  </script>
+</body>
+</html>
