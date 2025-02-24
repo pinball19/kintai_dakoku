@@ -102,7 +102,7 @@
 
     // 現在のユーザー情報（例：{ employeeNumber: "12345" }）を管理
     let currentUser = null;
-    // 当日の打刻記録。各要素に { type, timestamp, id } を含む
+    // 当日の打刻記録。各要素に { type, timestamp, id, originalTimestamp (任意) } を含む
     let todayPunches = [];
 
     // セッション管理（localStorage を利用）
@@ -220,15 +220,20 @@
       if (clockInRecord) {
         // すでに出勤打刻がある場合は、確認後に更新
         if (confirm("すでに出勤打刻があります。本当に更新しますか？")) {
-          db.collection("punchRecords").doc(clockInRecord.id).update({
+          let updateData = {
             timestamp: firebase.firestore.Timestamp.fromDate(now)
-          })
-          .then(() => {
-            loadTodayRecords();
-          })
-          .catch(err => {
-            console.error("出勤打刻更新エラー: ", err);
-          });
+          };
+          // 初回更新の場合、originalTimestamp に更新前の値を保存
+          if (!clockInRecord.originalTimestamp) {
+            updateData.originalTimestamp = clockInRecord.timestamp;
+          }
+          db.collection("punchRecords").doc(clockInRecord.id).update(updateData)
+            .then(() => {
+              loadTodayRecords();
+            })
+            .catch(err => {
+              console.error("出勤打刻更新エラー: ", err);
+            });
         }
       } else {
         // 出勤レコードがなければ新規追加
@@ -261,15 +266,19 @@
       if (clockOutRecord) {
         // すでに退勤打刻がある場合は、更新確認をする
         if (confirm("すでに退勤打刻があります。本当に更新しますか？")) {
-          db.collection("punchRecords").doc(clockOutRecord.id).update({
+          let updateData = {
             timestamp: firebase.firestore.Timestamp.fromDate(now)
-          })
-          .then(() => {
-            loadTodayRecords();
-          })
-          .catch(err => {
-            console.error("退勤打刻更新エラー: ", err);
-          });
+          };
+          if (!clockOutRecord.originalTimestamp) {
+            updateData.originalTimestamp = clockOutRecord.timestamp;
+          }
+          db.collection("punchRecords").doc(clockOutRecord.id).update(updateData)
+            .then(() => {
+              loadTodayRecords();
+            })
+            .catch(err => {
+              console.error("退勤打刻更新エラー: ", err);
+            });
         }
       } else {
         // 新規で退勤レコードを追加
@@ -306,7 +315,12 @@
             data.id = doc.id; // ドキュメントIDを保持
             todayPunches.push(data);
             const li = document.createElement("li");
-            const timeString = data.timestamp.toDate().toLocaleTimeString();
+            let timeString = data.timestamp.toDate().toLocaleTimeString();
+            // 更新済みの場合、更新前の時刻も表示
+            if (data.originalTimestamp) {
+              let originalTime = data.originalTimestamp.toDate().toLocaleTimeString();
+              timeString += " (更新: " + originalTime + ")";
+            }
             li.textContent = (data.type === "clockIn" ? "出勤: " : "退勤: ") + timeString;
             recordList.appendChild(li);
           });
@@ -322,7 +336,7 @@
       let clockOutRecord = todayPunches.find(record => record.type === "clockOut");
       let clockInRecord = todayPunches.find(record => record.type === "clockIn");
       if (clockOutRecord) {
-        // 退勤がある場合は、退勤ボタンは更新可能（常に有効）
+        // 退勤がある場合、退勤ボタンは有効（更新可能）
         clockOutBtn.disabled = false;
         punchStatusDiv.textContent = "退勤打刻済み: " + clockOutRecord.timestamp.toDate().toLocaleTimeString();
         if (clockInRecord) {
