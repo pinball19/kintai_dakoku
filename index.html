@@ -36,7 +36,9 @@
     </div>
     <h2>今日の打刻</h2>
     <div id="punchStatus"></div>
-    <button id="punchBtn">出勤打刻</button>
+    <!-- 出勤ボタンと退勤ボタンを別々に用意 -->
+    <button id="clockInBtn">出勤</button>
+    <button id="clockOutBtn" disabled>退勤</button>
     <div id="todayRecords">
       <h3>当日の記録</h3>
       <ul id="recordList"></ul>
@@ -64,15 +66,15 @@
 
   <script>
     // Firebase の設定（ご自身のプロジェクト情報に置き換えてください）
-const firebaseConfig = {
-  apiKey: "AIzaSyDzYAtr_PA8cfibICKwb3KZA6xyeNDHtjY",
-  authDomain: "kintaidakoku-21454.firebaseapp.com",
-  projectId: "kintaidakoku-21454",
-  storageBucket: "kintaidakoku-21454.firebasestorage.app",
-  messagingSenderId: "185561108336",
-  appId: "1:185561108336:web:a5eab6de7a713a946a49b5",
-  measurementId: "G-TZKSMNH7HZ"
-};
+    const firebaseConfig = {
+      apiKey: "AIzaSyDzYAtr_PA8cfibICKwb3KZA6xyeNDHtjY",
+      authDomain: "kintaidakoku-21454.firebaseapp.com",
+      projectId: "kintaidakoku-21454",
+      storageBucket: "kintaidakoku-21454.firebasestorage.app",
+      messagingSenderId: "185561108336",
+      appId: "1:185561108336:web:a5eab6de7a713a946a49b5",
+      measurementId: "G-TZKSMNH7HZ"
+    };
 
     // Firebase 初期化
     firebase.initializeApp(firebaseConfig);
@@ -85,7 +87,8 @@ const firebaseConfig = {
     const loginBtn = document.getElementById('loginBtn');
     const registerBtn = document.getElementById('registerBtn');
     const logoutBtn = document.getElementById('logoutBtn');
-    const punchBtn = document.getElementById('punchBtn');
+    const clockInBtn = document.getElementById('clockInBtn');
+    const clockOutBtn = document.getElementById('clockOutBtn');
     const showHistoryBtn = document.getElementById('showHistoryBtn');
     const backToDashboardBtn = document.getElementById('backToDashboardBtn');
     const employeeNumberInput = document.getElementById('employeeNumber');
@@ -207,22 +210,51 @@ const firebaseConfig = {
       showLogin();
     });
 
-    // 出勤・退勤打刻処理
-    punchBtn.addEventListener('click', () => {
+    // 出勤ボタン処理
+    clockInBtn.addEventListener('click', () => {
       if (!currentUser) return;
+      // すでに出勤打刻済みの場合はブロック
+      let lastPunch = todayPunches[todayPunches.length - 1];
+      if (lastPunch && lastPunch.type === "clockIn") {
+        alert("すでに出勤打刻済みです。");
+        return;
+      }
       const now = new Date();
-      const type = punchBtn.textContent.includes("出勤") ? "clockIn" : "clockOut";
       const record = {
         userId: currentUser.employeeNumber,
         timestamp: firebase.firestore.Timestamp.fromDate(now),
-        type: type
+        type: "clockIn"
       };
       db.collection("punchRecords").add(record)
         .then(() => {
           loadTodayRecords();
         })
         .catch(err => {
-          console.error("打刻エラー: ", err);
+          console.error("出勤打刻エラー: ", err);
+        });
+    });
+
+    // 退勤ボタン処理
+    clockOutBtn.addEventListener('click', () => {
+      if (!currentUser) return;
+      // 出勤している状態でなければブロック
+      let lastPunch = todayPunches[todayPunches.length - 1];
+      if (!lastPunch || lastPunch.type === "clockOut") {
+        alert("まだ出勤打刻がありません。");
+        return;
+      }
+      const now = new Date();
+      const record = {
+        userId: currentUser.employeeNumber,
+        timestamp: firebase.firestore.Timestamp.fromDate(now),
+        type: "clockOut"
+      };
+      db.collection("punchRecords").add(record)
+        .then(() => {
+          loadTodayRecords();
+        })
+        .catch(err => {
+          console.error("退勤打刻エラー: ", err);
         });
     });
 
@@ -255,11 +287,15 @@ const firebaseConfig = {
     function updatePunchStatus() {
       let lastPunch = todayPunches[todayPunches.length - 1];
       if (!lastPunch || lastPunch.type === "clockOut") {
-        punchBtn.textContent = "出勤打刻";
+        // 出勤していない状態：出勤ボタン有効、退勤ボタン無効
+        clockInBtn.disabled = false;
+        clockOutBtn.disabled = true;
         punchStatusDiv.textContent = "まだ出勤打刻がありません";
         workDurationDiv.textContent = "";
       } else {
-        punchBtn.textContent = "退勤打刻";
+        // 出勤中の状態：出勤ボタン無効、退勤ボタン有効
+        clockInBtn.disabled = true;
+        clockOutBtn.disabled = false;
         punchStatusDiv.textContent = "出勤済み: " + lastPunch.timestamp.toDate().toLocaleTimeString();
         // 最初の出勤と退勤で勤務時間を計算（例として）
         const clockIn = todayPunches.find(r => r.type === "clockIn");
