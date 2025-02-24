@@ -89,6 +89,11 @@
       font-weight: 600;
       font-size: 16px;
     }
+
+    /* CSVダウンロードボタン */
+    #downloadCSVBtn {
+      margin-top: 8px;
+    }
   </style>
 </head>
 <body>
@@ -126,6 +131,8 @@
         </div>
         <div class="search-row">
           <button id="searchBtn">検索</button>
+          <!-- CSVダウンロードボタンを追加 -->
+          <button id="downloadCSVBtn">CSVダウンロード</button>
         </div>
       </div>
 
@@ -172,6 +179,8 @@ const firebaseConfig = {
     const endDateInput = document.getElementById("endDate");
     const sortSelect = document.getElementById("sortSelect");
     const searchBtn = document.getElementById("searchBtn");
+    const downloadCSVBtn = document.getElementById("downloadCSVBtn");
+
     const recordsTableBody = document.getElementById("recordsTableBody");
     const prevPageBtn = document.getElementById("prevPageBtn");
     const nextPageBtn = document.getElementById("nextPageBtn");
@@ -238,27 +247,20 @@ const firebaseConfig = {
       }
 
       // 日付範囲フィルタ
-      let useDateFilter = false;
       if (startDateVal) {
-        useDateFilter = true;
         const startDate = new Date(startDateVal);
         startDate.setHours(0,0,0,0);
         baseQuery = baseQuery.where("timestamp", ">=", firebase.firestore.Timestamp.fromDate(startDate));
       }
       if (endDateVal) {
-        useDateFilter = true;
         const endDate = new Date(endDateVal);
         endDate.setHours(24,0,0,0);
         baseQuery = baseQuery.where("timestamp", "<", firebase.firestore.Timestamp.fromDate(endDate));
       }
 
-      // 並べ替えロジック
-      // Firestoreの制約: 範囲フィルタがある場合、最初の orderBy はそのフィールド (timestamp) でなければならない。
-      // よって、最初に timestamp を orderBy し、2つ目に userId を orderBy する形に統一する。
-      // 複合インデックス (timestamp asc, userId asc) と (timestamp desc, userId desc) を作っておくとエラーが出ません。
+      // 並べ替え: timestamp を最初に orderBy
       switch (sortOption) {
         case "userIdAsc":
-          // 最初に timestamp、同じ方向で userId
           baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
           break;
         case "userIdDesc":
@@ -303,8 +305,6 @@ const firebaseConfig = {
             const userId = data.userId || "-";
             const dateObj = data.timestamp.toDate();
             const dateStr = dateObj.toLocaleDateString();
-
-            // 出勤/退勤を1行にまとめるには集約が必要だが、ここでは1レコード=1打刻として簡易表示
             let clockIn = "";
             let clockOut = "";
             let durationStr = "-";
@@ -326,15 +326,107 @@ const firebaseConfig = {
             recordsTableBody.appendChild(row);
           });
 
-          // 次へボタン: 取得件数が pageSize 未満なら無効
           nextPageBtn.disabled = (snapshot.size < pageSize);
-
-          // 前へボタン: prevStack が空 + 今が最初のページなら無効
           prevPageBtn.disabled = (prevStack.length === 0 && direction !== "next");
         })
         .catch(err => {
           console.error("レコード取得エラー:", err);
         });
+    }
+
+    // CSVダウンロードボタン押下
+    downloadCSVBtn.addEventListener("click", () => {
+      downloadCSV();
+    });
+
+    // CSVダウンロード処理
+    function downloadCSV() {
+      // 検索・フィルタ・ソートの条件を再取得し、全件（上限なし）でクエリ
+      // ※ データ量が多いとクエリサイズの制限に当たる可能性があるので注意
+      let empNo = searchEmployeeNumberInput.value.trim();
+      let startDateVal = startDateInput.value;
+      let endDateVal = endDateInput.value;
+      let sortOption = sortSelect.value;
+
+      let baseQuery = db.collection("punchRecords");
+
+      if (empNo) {
+        baseQuery = baseQuery.where("userId", "==", empNo);
+      }
+      if (startDateVal) {
+        const startDate = new Date(startDateVal);
+        startDate.setHours(0,0,0,0);
+        baseQuery = baseQuery.where("timestamp", ">=", firebase.firestore.Timestamp.fromDate(startDate));
+      }
+      if (endDateVal) {
+        const endDate = new Date(endDateVal);
+        endDate.setHours(24,0,0,0);
+        baseQuery = baseQuery.where("timestamp", "<", firebase.firestore.Timestamp.fromDate(endDate));
+      }
+
+      // 並べ替え: timestamp → userId
+      switch (sortOption) {
+        case "userIdAsc":
+          baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
+          break;
+        case "userIdDesc":
+          baseQuery = baseQuery.orderBy("timestamp", "desc").orderBy("userId", "desc");
+          break;
+        case "dateAsc":
+          baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
+          break;
+        case "dateDesc":
+          baseQuery = baseQuery.orderBy("timestamp", "desc").orderBy("userId", "desc");
+          break;
+        default:
+          baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
+      }
+
+      // ここでは .limit() を付けずに全件取得する例
+      // 大量データの場合は注意
+      baseQuery.get().then(snapshot => {
+        if (snapshot.empty) {
+          alert("ダウンロード対象のデータがありません。");
+          return;
+        }
+
+        // CSV用のヘッダー行
+        let csv = "社員番号,日付,出勤時刻,退勤時刻,勤務時間\n";
+
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          const userId = data.userId || "-";
+          const dateObj = data.timestamp.toDate();
+          const dateStr = dateObj.toLocaleDateString();
+          let clockIn = "";
+          let clockOut = "";
+          let durationStr = "-";
+
+          if (data.type === "clockIn") {
+            clockIn = dateObj.toLocaleTimeString();
+          } else if (data.type === "clockOut") {
+            clockOut = dateObj.toLocaleTimeString();
+          }
+
+          // CSV 1行を生成
+          // ダブルクォートやカンマのエスケープが必要な場合もあるが、簡易例とする
+          csv += `${userId},${dateStr},${clockIn},${clockOut},${durationStr}\n`;
+        });
+
+        // Blobを生成し、ダウンロードリンクを作成
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", "punch_records.csv");
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      })
+      .catch(err => {
+        console.error("CSVダウンロードエラー:", err);
+      });
     }
   </script>
 </body>
