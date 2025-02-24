@@ -6,6 +6,14 @@
   <link rel="stylesheet" href="style.css">
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <style>
+    /* 現在時刻の表示をボタンと同程度の大きさに */
+    .current-time {
+      font-size: 48px; /* ボタンと同程度の大きさ */
+      text-align: center;
+      margin-bottom: 20px;
+    }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -17,8 +25,10 @@
         <span id="userInfo"></span>
         <button id="logoutBtn">ログアウト</button>
       </div>
-      <h2>今日の打刻</h2>
-      <!-- punchStatus 削除 -->
+
+      <!-- ここで「今日の打刻」見出しを削除し、代わりに現在時刻を表示する要素を配置 -->
+      <div id="currentTime" class="current-time"></div>
+
       <div class="button-group">
         <button id="clockInBtn">出勤</button>
         <button id="clockOutBtn" disabled>退勤</button>
@@ -27,11 +37,11 @@
         <h3>当日の記録</h3>
         <ul id="recordList"></ul>
       </div>
-      <!-- workDuration 削除 -->
       <button id="showHistoryBtn">過去の記録を見る</button>
     </section>
   </div>
   <script>
+    // Firebaseの設定（各自のプロジェクト情報に置き換えてください）
     const firebaseConfig = {
       apiKey: "AIzaSyDzYAtr_PA8cfibICKwb3KZA6xyeNDHtjY",
       authDomain: "kintaidakoku-21454.firebaseapp.com",
@@ -50,27 +60,40 @@
     const clockOutBtn = document.getElementById("clockOutBtn");
     const showHistoryBtn = document.getElementById("showHistoryBtn");
     const recordList = document.getElementById("recordList");
-    
+    const currentTimeDiv = document.getElementById("currentTime");
+
     let currentUser = null;
-    // 当日の打刻記録（各要素に { type, timestamp, id, originalTimestamp (任意) } を含む）
     let todayPunches = [];
 
+    // ページ読み込み時にユーザー情報を確認
     window.onload = () => {
       const user = localStorage.getItem("currentUser");
       if (!user) {
-        window.location.href = "login.html";
+        window.location.href = "index.html";
       } else {
         currentUser = JSON.parse(user);
         userInfoSpan.textContent = "社員番号: " + currentUser.employeeNumber;
         loadTodayRecords();
       }
+      // 時刻表示の初期化＆1秒ごとに更新
+      updateCurrentTime();
+      setInterval(updateCurrentTime, 1000);
     };
 
+    // 現在時刻を表示
+    function updateCurrentTime() {
+      const now = new Date();
+      // 好みで「toLocaleTimeString()」やフォーマットを変えてもOK
+      currentTimeDiv.textContent = now.toLocaleTimeString();
+    }
+
+    // ログアウト
     logoutBtn.addEventListener("click", () => {
       localStorage.removeItem("currentUser");
-      window.location.href = "login.html";
+      window.location.href = "index.html";
     });
 
+    // 出勤ボタン
     clockInBtn.addEventListener("click", () => {
       const now = new Date();
       let clockInRecord = todayPunches.find(record => record.type === "clockIn");
@@ -96,6 +119,7 @@
       }
     });
 
+    // 退勤ボタン
     clockOutBtn.addEventListener("click", () => {
       const now = new Date();
       let clockInRecord = todayPunches.find(record => record.type === "clockIn");
@@ -126,6 +150,7 @@
       }
     });
 
+    // 今日の記録を読み込み
     function loadTodayRecords() {
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
@@ -143,14 +168,18 @@
             todayPunches.push(data);
             if (data.originalTimestamp) {
               let liOriginal = document.createElement("li");
-              liOriginal.textContent = (data.type === "clockIn" ? "出勤: " : "退勤: ") + data.originalTimestamp.toDate().toLocaleTimeString();
+              liOriginal.textContent = (data.type === "clockIn" ? "出勤: " : "退勤: ")
+                + data.originalTimestamp.toDate().toLocaleTimeString();
               recordList.appendChild(liOriginal);
+
               let liUpdated = document.createElement("li");
-              liUpdated.textContent = (data.type === "clockIn" ? "出勤: " : "退勤: ") + data.timestamp.toDate().toLocaleTimeString() + "  更新";
+              liUpdated.textContent = (data.type === "clockIn" ? "出勤: " : "退勤: ")
+                + data.timestamp.toDate().toLocaleTimeString() + "  更新";
               recordList.appendChild(liUpdated);
             } else {
               let li = document.createElement("li");
-              li.textContent = (data.type === "clockIn" ? "出勤: " : "退勤: ") + data.timestamp.toDate().toLocaleTimeString();
+              li.textContent = (data.type === "clockIn" ? "出勤: " : "退勤: ")
+                + data.timestamp.toDate().toLocaleTimeString();
               recordList.appendChild(li);
             }
           });
@@ -158,6 +187,7 @@
         });
     }
 
+    // ボタンの有効/無効を更新
     function updatePunchStatus() {
       clockInBtn.disabled = false;
       let clockInRecord = todayPunches.find(record => record.type === "clockIn");
@@ -173,6 +203,7 @@
       }
     }
 
+    // 履歴画面へ
     showHistoryBtn.addEventListener("click", () => {
       window.location.href = "history.html";
     });
