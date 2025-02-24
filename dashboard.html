@@ -18,7 +18,7 @@
         <button id="logoutBtn">ログアウト</button>
       </div>
       <h2>今日の打刻</h2>
-      <div id="punchStatus"></div>
+      <!-- punchStatus 削除 -->
       <div class="button-group">
         <button id="clockInBtn">出勤</button>
         <button id="clockOutBtn" disabled>退勤</button>
@@ -27,7 +27,7 @@
         <h3>当日の記録</h3>
         <ul id="recordList"></ul>
       </div>
-      <div id="workDuration"></div>
+      <!-- workDuration 削除 -->
       <button id="showHistoryBtn">過去の記録を見る</button>
     </section>
   </div>
@@ -50,10 +50,9 @@
     const clockOutBtn = document.getElementById("clockOutBtn");
     const showHistoryBtn = document.getElementById("showHistoryBtn");
     const recordList = document.getElementById("recordList");
-    const punchStatusDiv = document.getElementById("punchStatus");
-    const workDurationDiv = document.getElementById("workDuration");
-
+    
     let currentUser = null;
+    // 当日の打刻記録（各要素に { type, timestamp, id, originalTimestamp (任意) } を含む）
     let todayPunches = [];
 
     window.onload = () => {
@@ -165,21 +164,11 @@
       let clockOutRecord = todayPunches.find(record => record.type === "clockOut");
       if (clockOutRecord) {
         clockOutBtn.disabled = false;
-        punchStatusDiv.textContent = "退勤打刻済み: " + clockOutRecord.timestamp.toDate().toLocaleTimeString();
-        if (clockInRecord) {
-          const durationMs = clockOutRecord.timestamp.toDate() - clockInRecord.timestamp.toDate();
-          const durationHours = (durationMs / (1000 * 60 * 60)).toFixed(2);
-          workDurationDiv.textContent = "勤務時間: " + durationHours + " 時間";
-        }
       } else {
         if (!clockInRecord) {
           clockOutBtn.disabled = true;
-          punchStatusDiv.textContent = "まだ出勤打刻がありません";
-          workDurationDiv.textContent = "";
         } else {
           clockOutBtn.disabled = false;
-          punchStatusDiv.textContent = "出勤打刻済み: " + clockInRecord.timestamp.toDate().toLocaleTimeString();
-          workDurationDiv.textContent = "";
         }
       }
     }
