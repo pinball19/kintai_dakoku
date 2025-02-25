@@ -144,6 +144,7 @@
             <th>出勤時刻</th>
             <th>退勤時刻</th>
             <th>勤務時間</th>
+            <th>残業時間</th>
           </tr>
         </thead>
         <tbody id="recordsTableBody"></tbody>
@@ -158,8 +159,8 @@
   </div>
 
   <script>
-    // Firebase 設定
-const firebaseConfig = {
+    // Firebase 設定（YOUR_API_KEY, YOUR_PROJECT_ID などは各自の設定に置き換えてください）
+    const firebaseConfig = {
   apiKey: "AIzaSyDzYAtr_PA8cfibICKwb3KZA6xyeNDHtjY",
   authDomain: "kintaidakoku-21454.firebaseapp.com",
   projectId: "kintaidakoku-21454",
@@ -195,7 +196,6 @@ const firebaseConfig = {
     window.onload = () => {
       const mgr = localStorage.getItem("currentManager");
       if (!mgr) {
-        // 未ログイン → 管理者ログイン画面へ
         window.location.href = "managerLogin.html";
       } else {
         currentManager = JSON.parse(mgr);
@@ -256,7 +256,7 @@ const firebaseConfig = {
       firstVisible = firstDoc;
       lastVisible = lastDoc;
 
-      // ★ 同日打刻をグループ化
+      // 同日打刻をグループ化
       let grouped = groupPunchRecords(snapshot);
 
       // 表示用テーブルに反映
@@ -268,7 +268,6 @@ const firebaseConfig = {
 
     // CSVダウンロード
     downloadCSVBtn.addEventListener("click", async () => {
-      // 検索・ソート条件は同じだが、全件取得する例
       const { baseQuery } = buildQuery();
       const snapshot = await baseQuery.get();
       if (snapshot.empty) {
@@ -279,7 +278,6 @@ const firebaseConfig = {
       let grouped = groupPunchRecords(snapshot);
       let csvContent = buildCSV(grouped);
 
-      // Blobを生成し、ダウンロード
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -314,8 +312,7 @@ const firebaseConfig = {
         baseQuery = baseQuery.where("timestamp", "<", firebase.firestore.Timestamp.fromDate(eDate));
       }
 
-      // Firestoreの制約: 最初の orderBy は timestamp
-      // 2つ目に userId を orderBy
+      // Firestoreの制約: 最初の orderBy は timestamp、次に userId
       switch (sortOption) {
         case "userIdAsc":
           baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
@@ -336,10 +333,8 @@ const firebaseConfig = {
       return { baseQuery };
     }
 
-    // ★ 同日打刻のグループ化処理
+    // 同日打刻のグループ化処理（キー: userId + 日付）
     function groupPunchRecords(snapshot) {
-      // キー: "userId_YYYY/MM/DD"
-      // 値: { userId, dateStr, clockIn(最も遅い), clockOut(最も遅い) }
       let mapKeyToObj = {};
       let grouped = [];
 
@@ -347,12 +342,9 @@ const firebaseConfig = {
         let data = doc.data();
         let userId = data.userId || "-";
         let dateObj = data.timestamp.toDate();
-        let dateStr = dateObj.toLocaleDateString(); // "YYYY/MM/DD"など
+        let dateStr = dateObj.toLocaleDateString();
 
-        // グループキー
         let key = userId + "_" + dateStr;
-
-        // 初回ならオブジェクト作成
         if (!mapKeyToObj[key]) {
           mapKeyToObj[key] = {
             userId: userId,
@@ -364,14 +356,13 @@ const firebaseConfig = {
         }
         let rec = mapKeyToObj[key];
 
-        // 出勤は「最も遅い」ものを採用
         if (data.type === "clockIn") {
+          // 最も遅い出勤を採用
           if (!rec.clockIn || dateObj > rec.clockIn) {
             rec.clockIn = dateObj;
           }
-        }
-        // 退勤は「最も遅い」ものを採用
-        else if (data.type === "clockOut") {
+        } else if (data.type === "clockOut") {
+          // 最も遅い退勤を採用
           if (!rec.clockOut || dateObj > rec.clockOut) {
             rec.clockOut = dateObj;
           }
@@ -381,19 +372,22 @@ const firebaseConfig = {
       return grouped;
     }
 
-    // テーブル表示
+    // テーブル表示（残業時間を追加）
     function renderGroupedRecords(grouped) {
       recordsTableBody.innerHTML = "";
       grouped.forEach(obj => {
         let clockInStr = obj.clockIn ? obj.clockIn.toLocaleTimeString() : "-";
         let clockOutStr = obj.clockOut ? obj.clockOut.toLocaleTimeString() : "-";
 
-        // 勤務時間の計算 (退勤 - 出勤)
         let durationStr = "-";
+        let overtimeStr = "-";
         if (obj.clockIn && obj.clockOut) {
           let ms = obj.clockOut - obj.clockIn;
           let hours = ms / (1000 * 60 * 60);
           durationStr = hours.toFixed(2);
+          // 残業時間は、勤務時間が8時間を超えた分
+          let overtime = hours > 8 ? hours - 8 : 0;
+          overtimeStr = overtime.toFixed(2);
         }
 
         let row = document.createElement("tr");
@@ -403,26 +397,29 @@ const firebaseConfig = {
           <td>${clockInStr}</td>
           <td>${clockOutStr}</td>
           <td>${durationStr}</td>
+          <td>${overtimeStr}</td>
         `;
         recordsTableBody.appendChild(row);
       });
     }
 
-    // CSV用文字列生成
+    // CSV用文字列生成（残業時間も含む）
     function buildCSV(grouped) {
-      let csv = "社員番号,日付,出勤時刻,退勤時刻,勤務時間\n";
+      let csv = "社員番号,日付,出勤時刻,退勤時刻,勤務時間,残業時間\n";
       grouped.forEach(obj => {
         let clockInStr = obj.clockIn ? obj.clockIn.toLocaleTimeString() : "";
         let clockOutStr = obj.clockOut ? obj.clockOut.toLocaleTimeString() : "";
 
         let durationStr = "";
+        let overtimeStr = "";
         if (obj.clockIn && obj.clockOut) {
           let ms = obj.clockOut - obj.clockIn;
           let hours = ms / (1000 * 60 * 60);
           durationStr = hours.toFixed(2);
+          let overtime = hours > 8 ? hours - 8 : 0;
+          overtimeStr = overtime.toFixed(2);
         }
-
-        csv += `${obj.userId},${obj.dateStr},${clockInStr},${clockOutStr},${durationStr}\n`;
+        csv += `${obj.userId},${obj.dateStr},${clockInStr},${clockOutStr},${durationStr},${overtimeStr}\n`;
       });
       return csv;
     }
