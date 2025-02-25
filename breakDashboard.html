@@ -132,7 +132,7 @@
     window.onload = () => {
       const user = localStorage.getItem("currentUser");
       if (!user) {
-        window.location.href = "index.html"; // ログイン画面へ
+        window.location.href = "login_kyukei.html"; // ログイン画面へ
       } else {
         currentUser = JSON.parse(user);
         userInfoSpan.textContent = "社員番号: " + currentUser.employeeNumber;
@@ -142,7 +142,7 @@
 
     logoutBtn.addEventListener("click", () => {
       localStorage.removeItem("currentUser");
-      window.location.href = "index.html";
+      window.location.href = "login_kyukei.html";
     });
 
     // 休憩開始ボタン処理
