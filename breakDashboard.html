@@ -28,7 +28,7 @@
     }
     /* コンテナ: 幅を制限し、スマホでも中央に */
     .container {
-      max-width: 600px; /* スマホでは 600px 幅に */
+      max-width: 600px; /* スマホでは600px */
       margin: 0 auto;
       padding: 16px;
     }
@@ -120,7 +120,6 @@
       justify-content: center;
       gap: 16px;
     }
-
     /* スマホ用のメディアクエリ */
     @media (max-width: 480px) {
       header h1 {
@@ -135,7 +134,6 @@
         padding: 8px;
       }
     }
-
     /* PC版用スタイル（画面幅800px以上の場合） */
     @media (min-width: 800px) {
       .container {
@@ -227,7 +225,7 @@
   </div>
 
   <script>
-    // ヘルパー関数: 時刻表示を「〇時〇分〇秒」形式に（ゼロパディング付き）
+    // ヘルパー関数: 日付オブジェクトを「〇時〇分〇秒」形式に整形
     function formatTime(date) {
       let h = date.getHours();
       let m = date.getMinutes();
@@ -242,6 +240,24 @@
       } else {
         return padZero(s) + "秒";
       }
+    }
+
+    // ヘルパー関数: ミリ秒の差を「〇時〇分〇秒」形式に整形（duration用）
+    function formatDurationFromMs(ms) {
+      const totalSeconds = Math.floor(ms / 1000);
+      const h = Math.floor(totalSeconds / 3600);
+      const r = totalSeconds % 3600;
+      const m = Math.floor(r / 60);
+      const s = r % 60;
+      let result = "";
+      if (h > 0) {
+        result += h + "時" + (m < 10 ? "0" : "") + m + "分" + (s < 10 ? "0" : "") + s + "秒";
+      } else if (m > 0) {
+        result += (m < 10 ? "0" : "") + m + "分" + (s < 10 ? "0" : "") + s + "秒";
+      } else {
+        result += (s < 10 ? "0" : "") + s + "秒";
+      }
+      return result;
     }
 
     // Firebase の設定
@@ -334,7 +350,7 @@
         });
     });
 
-    // 当日分の休憩記録を読み込み
+    // 当日分の休憩記録読み込み
     async function loadBreakRecords() {
       recordsTableBody.innerHTML = "";
       todayBreakRecords = [];
@@ -362,11 +378,10 @@
       calculateTotalBreakTime(grouped);
     }
 
-    // breakStart, breakEnd をペア化し、未ペアのstartも表示
+    // breakStart, breakEnd をペア化（未ペアのstartも表示）
     function groupBreakRecords(records) {
       let groups = [];
       let breakStartQueue = [];
-
       for (let r of records) {
         if (r.type === "breakStart") {
           breakStartQueue.push(r);
@@ -386,19 +401,18 @@
       return groups;
     }
 
-    // テーブル表示（分単位） - 時刻は formatTime() で整形
+    // テーブル表示（分単位、時刻は formatTime() で整形）
     function renderGroupedRecords(groups) {
       recordsTableBody.innerHTML = "";
       groups.forEach((group, index) => {
         let startTime = group.breakStart ? formatTime(group.breakStart.timestamp.toDate()) : "";
         let endTime = group.breakEnd ? formatTime(group.breakEnd.timestamp.toDate()) : "";
-        let durationMin = 0;
+
+        let durationMs = 0;
         if (group.breakStart && group.breakEnd) {
-          let ms = group.breakEnd.timestamp.toDate() - group.breakStart.timestamp.toDate();
-          durationMin = ms / 1000 / 60; // 分
+          durationMs = group.breakEnd.timestamp.toDate() - group.breakStart.timestamp.toDate();
         }
-        durationMin = Math.round(durationMin * 100) / 100;
-        let durationStr = durationMin.toFixed(2);
+        let durationStr = group.breakStart && group.breakEnd ? formatDurationFromMs(durationMs) : "0秒";
 
         let row = document.createElement("tr");
         row.innerHTML = `
@@ -414,36 +428,30 @@
       });
     }
 
-    // 合計休憩時間（分）計算
+    // 合計休憩時間（分）計算→合計もミリ秒の合計を計算してフォーマット
     function calculateTotalBreakTime(groups) {
-      let totalMin = 0;
+      let totalMs = 0;
       groups.forEach(group => {
         if (group.breakStart && group.breakEnd) {
-          let ms = group.breakEnd.timestamp.toDate() - group.breakStart.timestamp.toDate();
-          let minutes = ms / 1000 / 60;
-          minutes = Math.round(minutes * 100) / 100;
-          totalMin += minutes;
+          totalMs += group.breakEnd.timestamp.toDate() - group.breakStart.timestamp.toDate();
         }
       });
-      totalMin = Math.round(totalMin * 100) / 100;
-      totalBreakTimeSpan.textContent = totalMin.toFixed(2);
+      totalBreakTimeSpan.textContent = formatDurationFromMs(totalMs);
     }
 
     // CSV用文字列生成（分単位、時刻は formatTime() で整形）
     function buildCSV(groups) {
-      let csv = "社員番号,日付,休憩開始,休憩終了,休憩時間（分）\n";
+      let csv = "社員番号,日付,休憩開始,休憩終了,休憩時間\n";
       groups.forEach(group => {
         let userId = currentUser.employeeNumber;
         let dateStr = group.breakStart ? group.breakStart.timestamp.toDate().toLocaleDateString() : (group.breakEnd ? group.breakEnd.timestamp.toDate().toLocaleDateString() : "");
         let breakStartStr = group.breakStart ? formatTime(group.breakStart.timestamp.toDate()) : "";
         let breakEndStr = group.breakEnd ? formatTime(group.breakEnd.timestamp.toDate()) : "";
-        let durationMin = 0;
+        let durationMs = 0;
         if (group.breakStart && group.breakEnd) {
-          let ms = group.breakEnd.timestamp.toDate() - group.breakStart.timestamp.toDate();
-          durationMin = ms / 1000 / 60;
+          durationMs = group.breakEnd.timestamp.toDate() - group.breakStart.timestamp.toDate();
         }
-        durationMin = Math.round(durationMin * 100) / 100;
-        let durationStr = durationMin.toFixed(2);
+        let durationStr = group.breakStart && group.breakEnd ? formatDurationFromMs(durationMs) : "0秒";
         csv += `${userId},${dateStr},${breakStartStr},${breakEndStr},${durationStr}\n`;
       });
       return csv;
