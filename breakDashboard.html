@@ -120,6 +120,7 @@
       justify-content: center;
       gap: 16px;
     }
+
     /* スマホ用のメディアクエリ */
     @media (max-width: 480px) {
       header h1 {
@@ -134,6 +135,7 @@
         padding: 8px;
       }
     }
+
     /* PC版用スタイル（画面幅800px以上の場合） */
     @media (min-width: 800px) {
       .container {
@@ -164,7 +166,7 @@
       .modal-content {
         font-size: 20px;
       }
-      /* テーブル内の「編集」および「削除」ボタン */
+      /* テーブル内のボタン（編集・削除）を大きくする */
       #breakRecordsTable td button {
         font-size: 16px;
         padding: 8px 18px;
@@ -191,7 +193,7 @@
         <button id="breakEndBtn">休憩終了</button>
       </div>
 
-      <!-- ボタン押下時のステータス表示 -->
+      <!-- ボタン押下時のステータスメッセージ -->
       <div id="statusMessage"></div>
 
       <!-- 当日の休憩記録一覧 -->
@@ -225,6 +227,23 @@
   </div>
 
   <script>
+    // ヘルパー関数: 時刻表示を「〇時〇分〇秒」形式に（ゼロパディング付き）
+    function formatTime(date) {
+      let h = date.getHours();
+      let m = date.getMinutes();
+      let s = date.getSeconds();
+      function padZero(num) {
+        return num.toString().padStart(2, '0');
+      }
+      if (h > 0) {
+        return h + "時" + padZero(m) + "分" + padZero(s) + "秒";
+      } else if (m > 0) {
+        return padZero(m) + "分" + padZero(s) + "秒";
+      } else {
+        return padZero(s) + "秒";
+      }
+    }
+
     // Firebase の設定
     const firebaseConfig = {
       apiKey: "AIzaSyDzYAatr_PA8cfibICKwb3KZA6xyeNDHtjY",
@@ -238,7 +257,7 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // DOM要素
+    // DOM要素取得
     const userInfoSpan = document.getElementById("userInfo");
     const logoutBtn = document.getElementById("logoutBtn");
     const breakStartBtn = document.getElementById("breakStartBtn");
@@ -258,9 +277,7 @@
 
     function showStatus(msg) {
       statusMessage.textContent = msg;
-      setTimeout(() => {
-        statusMessage.textContent = "";
-      }, 2000);
+      setTimeout(() => { statusMessage.textContent = ""; }, 2000);
     }
 
     window.onload = () => {
@@ -317,7 +334,7 @@
         });
     });
 
-    // 当日分の休憩記録読み込み
+    // 当日分の休憩記録を読み込み
     async function loadBreakRecords() {
       recordsTableBody.innerHTML = "";
       todayBreakRecords = [];
@@ -369,13 +386,12 @@
       return groups;
     }
 
-    // テーブル表示（分単位）
+    // テーブル表示（分単位） - 時刻は formatTime() で整形
     function renderGroupedRecords(groups) {
       recordsTableBody.innerHTML = "";
       groups.forEach((group, index) => {
-        let startTime = group.breakStart ? group.breakStart.timestamp.toDate().toLocaleTimeString() : "";
-        let endTime = group.breakEnd ? group.breakEnd.timestamp.toDate().toLocaleTimeString() : "";
-
+        let startTime = group.breakStart ? formatTime(group.breakStart.timestamp.toDate()) : "";
+        let endTime = group.breakEnd ? formatTime(group.breakEnd.timestamp.toDate()) : "";
         let durationMin = 0;
         if (group.breakStart && group.breakEnd) {
           let ms = group.breakEnd.timestamp.toDate() - group.breakStart.timestamp.toDate();
@@ -413,14 +429,14 @@
       totalBreakTimeSpan.textContent = totalMin.toFixed(2);
     }
 
-    // CSV用文字列生成（分単位）
+    // CSV用文字列生成（分単位、時刻は formatTime() で整形）
     function buildCSV(groups) {
       let csv = "社員番号,日付,休憩開始,休憩終了,休憩時間（分）\n";
       groups.forEach(group => {
         let userId = currentUser.employeeNumber;
         let dateStr = group.breakStart ? group.breakStart.timestamp.toDate().toLocaleDateString() : (group.breakEnd ? group.breakEnd.timestamp.toDate().toLocaleDateString() : "");
-        let breakStartStr = group.breakStart ? group.breakStart.timestamp.toDate().toLocaleTimeString() : "";
-        let breakEndStr = group.breakEnd ? group.breakEnd.timestamp.toDate().toLocaleTimeString() : "";
+        let breakStartStr = group.breakStart ? formatTime(group.breakStart.timestamp.toDate()) : "";
+        let breakEndStr = group.breakEnd ? formatTime(group.breakEnd.timestamp.toDate()) : "";
         let durationMin = 0;
         if (group.breakStart && group.breakEnd) {
           let ms = group.breakEnd.timestamp.toDate() - group.breakStart.timestamp.toDate();
@@ -478,10 +494,10 @@
       let newStartStr = "";
       let newEndStr = "";
       if (group.breakStart) {
-        newStartStr = prompt("新しい休憩開始時刻（HH:MM:SS）を入力してください。", group.breakStart.timestamp.toDate().toLocaleTimeString());
+        newStartStr = prompt("新しい休憩開始時刻（HH:MM:SS）を入力してください。", formatTime(group.breakStart.timestamp.toDate()));
       }
       if (group.breakEnd) {
-        newEndStr = prompt("新しい休憩終了時刻（HH:MM:SS）を入力してください。", group.breakEnd.timestamp.toDate().toLocaleTimeString());
+        newEndStr = prompt("新しい休憩終了時刻（HH:MM:SS）を入力してください。", formatTime(group.breakEnd.timestamp.toDate()));
       }
 
       if (newStartStr || newEndStr) {
@@ -509,12 +525,11 @@
       }
     }
 
-    // 削除ボタンの処理（新規追加）
+    // 削除ボタンの処理
     function deleteGroup(index) {
       let groups = groupBreakRecords(todayBreakRecords);
       let group = groups[index];
       if (confirm("本当にこの休憩記録を削除してよろしいですか？")) {
-        // 削除するレコードがあるかチェック
         let promises = [];
         if (group.breakStart) {
           promises.push(db.collection("breakRecords").doc(group.breakStart.id).delete());
