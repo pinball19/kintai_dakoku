@@ -12,7 +12,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <style>
-    /* ベースのリセットとフォントサイズ */
+    /* ベースのリセットとフォントサイズ（スマホ向けをデフォルト） */
     * {
       margin: 0;
       padding: 0;
@@ -29,7 +29,7 @@
 
     /* コンテナ: 幅を制限し、スマホでも中央に */
     .container {
-      max-width: 600px;
+      max-width: 600px; /* スマホでは 600px 幅に */
       margin: 0 auto;
       padding: 16px;
     }
@@ -129,18 +129,39 @@
       gap: 16px;
     }
 
-    /* スマホ用のメディアクエリ */
-    @media (max-width: 480px) {
+    /* スマホ用のメディアクエリ (max-width:480px) はそのままでもOK
+       → 必要なら追加で書いても良い
+    */
+
+    /* PC版用スタイル（画面幅800px以上の場合） */
+    @media (min-width: 800px) {
+      .container {
+        max-width: 1000px; /* PCではより広げる */
+        padding: 24px;
+      }
       header h1 {
-        font-size: 20px;
+        font-size: 28px;
+      }
+      #breakSection > div:first-child {
+        font-size: 16px;
       }
       .button-group button {
-        font-size: 14px;
-        padding: 8px 14px;
+        font-size: 18px;
+        padding: 12px 24px;
+        margin: 8px;
+      }
+      #statusMessage {
+        font-size: 16px;
       }
       #breakRecordsTable th, #breakRecordsTable td {
-        font-size: 12px;
-        padding: 8px;
+        font-size: 16px;
+        padding: 16px;
+      }
+      #totalBreakTime {
+        font-size: 18px;
+      }
+      .modal-content {
+        font-size: 16px;
       }
     }
   </style>
