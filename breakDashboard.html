@@ -46,7 +46,7 @@
       justify-content: center;
       gap: 16px;
     }
-    /* メッセージ表示用 */
+    /* ボタン押下後のステータス表示用 */
     #statusMessage {
       text-align: center;
       color: green;
@@ -71,7 +71,7 @@
         <button id="breakEndBtn">休憩終了</button>
       </div>
 
-      <!-- 成功メッセージなどを表示する領域 -->
+      <!-- ボタン押下時のステータス表示 -->
       <div id="statusMessage"></div>
 
       <!-- 当日の休憩記録一覧 -->
@@ -107,7 +107,7 @@
   <script>
     // Firebase の設定
     const firebaseConfig = {
-      apiKey: "AIzaSyDzYAtr_PA8cfibICKwb3KZA6xyeNDHtjY",
+      apiKey: "AIzaSyDzYAtr_PA8...",
       authDomain: "kintaidakoku-21454.firebaseapp.com",
       projectId: "kintaidakoku-21454",
       storageBucket: "kintaidakoku-21454.firebasestorage.app",
@@ -136,12 +136,13 @@
     let currentUser = null;
     let todayBreakRecords = [];
 
-    // 簡易的なステータスメッセージ表示
+    // ステータスメッセージ表示
     function showStatus(msg) {
       statusMessage.textContent = msg;
+      // 数秒後にメッセージを消す
       setTimeout(() => {
         statusMessage.textContent = "";
-      }, 2000); // 2秒後に消える
+      }, 2000);
     }
 
     window.onload = () => {
@@ -198,7 +199,7 @@
         });
     });
 
-    // 休憩記録の読み込み（当日分）
+    // 当日分の休憩記録を読み込み
     async function loadBreakRecords() {
       recordsTableBody.innerHTML = "";
       todayBreakRecords = [];
@@ -225,33 +226,51 @@
       calculateTotalBreakTime(grouped);
     }
 
-    // 同一日の breakRecords をペア（breakStart と breakEnd）でグループ化
+    // breakStart, breakEnd をペア化（未ペアのstartも表示）
     function groupBreakRecords(records) {
       let groups = [];
-      let tempStart = null;
-      records.forEach(record => {
-        if (record.type === "breakStart") {
-          tempStart = record; // 直近の breakStart
-        } else if (record.type === "breakEnd") {
-          if (tempStart) {
-            groups.push({
-              breakStart: tempStart,
-              breakEnd: record
-            });
-            tempStart = null;
+      let breakStartQueue = [];
+
+      // タイムスタンプ昇順で来るので、先入れ先出しでペアにする
+      for (let r of records) {
+        if (r.type === "breakStart") {
+          // 新しいstartを追加
+          breakStartQueue.push(r);
+        } else if (r.type === "breakEnd") {
+          // endが来た場合、キューの先頭をペアにする
+          if (breakStartQueue.length > 0) {
+            let start = breakStartQueue.shift();
+            groups.push({ breakStart: start, breakEnd: r });
+          } else {
+            // endだけが来た場合 -> start不明
+            groups.push({ breakStart: null, breakEnd: r });
           }
         }
-      });
+      }
+      // キューに残ったstartはendが無い -> partial row
+      while (breakStartQueue.length > 0) {
+        let s = breakStartQueue.shift();
+        groups.push({ breakStart: s, breakEnd: null });
+      }
       return groups;
     }
 
-    // グループ化した休憩記録をテーブルに表示
+    // テーブルに表示
     function renderGroupedRecords(groups) {
       recordsTableBody.innerHTML = "";
       groups.forEach((group, index) => {
-        let startTime = group.breakStart.timestamp.toDate().toLocaleTimeString();
-        let endTime = group.breakEnd.timestamp.toDate().toLocaleTimeString();
-        let duration = (group.breakEnd.timestamp.toDate() - group.breakStart.timestamp.toDate()) / (1000 * 60 * 60);
+        let startTime = group.breakStart
+          ? group.breakStart.timestamp.toDate().toLocaleTimeString()
+          : "";
+        let endTime = group.breakEnd
+          ? group.breakEnd.timestamp.toDate().toLocaleTimeString()
+          : "";
+        let duration = 0;
+        if (group.breakStart && group.breakEnd) {
+          duration = (group.breakEnd.timestamp.toDate() - group.breakStart.timestamp.toDate()) / (1000 * 60 * 60);
+        }
+        // 小数2桁で丸め
+        duration = Math.round(duration * 100) / 100;
         let durationStr = duration.toFixed(2);
 
         let row = document.createElement("tr");
@@ -265,36 +284,59 @@
       });
     }
 
-    // 合計休憩時間を計算して表示
+    // 合計休憩時間を計算
     function calculateTotalBreakTime(groups) {
       let total = 0;
       groups.forEach(group => {
-        let duration = (group.breakEnd.timestamp.toDate() - group.breakStart.timestamp.toDate()) / (1000 * 60 * 60);
-        total += duration;
+        if (group.breakStart && group.breakEnd) {
+          let duration = (group.breakEnd.timestamp.toDate() - group.breakStart.timestamp.toDate()) / (1000 * 60 * 60);
+          duration = Math.round(duration * 100) / 100;
+          total += duration;
+        }
       });
+      total = Math.round(total * 100) / 100;
       totalBreakTimeSpan.textContent = total.toFixed(2);
     }
 
-    // 編集ボタンが押されたときの処理
+    // 編集ボタン（簡易実装）
     function editGroup(index) {
       let groups = groupBreakRecords(todayBreakRecords);
       let group = groups[index];
-      let newStart = prompt("新しい休憩開始時刻（HH:MM:SS）を入力してください。", group.breakStart.timestamp.toDate().toLocaleTimeString());
-      let newEnd = prompt("新しい休憩終了時刻（HH:MM:SS）を入力してください。", group.breakEnd.timestamp.toDate().toLocaleTimeString());
-      if (newStart && newEnd) {
-        let dateStr = group.breakStart.timestamp.toDate().toLocaleDateString();
-        let newStartDate = new Date(dateStr + " " + newStart);
-        let newEndDate = new Date(dateStr + " " + newEnd);
-        db.collection("breakRecords").doc(group.breakStart.id).update({
-          timestamp: firebase.firestore.Timestamp.fromDate(newStartDate)
-        });
-        db.collection("breakRecords").doc(group.breakEnd.id).update({
-          timestamp: firebase.firestore.Timestamp.fromDate(newEndDate)
-        }).then(() => {
+
+      let newStartStr = "";
+      let newEndStr = "";
+      if (group.breakStart) {
+        newStartStr = prompt("新しい休憩開始時刻（HH:MM:SS）を入力してください。", group.breakStart.timestamp.toDate().toLocaleTimeString());
+      }
+      if (group.breakEnd) {
+        newEndStr = prompt("新しい休憩終了時刻（HH:MM:SS）を入力してください。", group.breakEnd.timestamp.toDate().toLocaleTimeString());
+      }
+
+      if (newStartStr || newEndStr) {
+        // 同日扱い
+        let dateStr = (group.breakStart || group.breakEnd).timestamp.toDate().toLocaleDateString();
+
+        if (group.breakStart && newStartStr) {
+          let newStartDate = new Date(dateStr + " " + newStartStr);
+          db.collection("breakRecords").doc(group.breakStart.id).update({
+            timestamp: firebase.firestore.Timestamp.fromDate(newStartDate)
+          });
+        }
+        if (group.breakEnd && newEndStr) {
+          let newEndDate = new Date(dateStr + " " + newEndStr);
+          db.collection("breakRecords").doc(group.breakEnd.id).update({
+            timestamp: firebase.firestore.Timestamp.fromDate(newEndDate)
+          })
+          .then(() => {
+            loadBreakRecords();
+          })
+          .catch(err => {
+            console.error("編集更新エラー:", err);
+          });
+        } else {
+          // breakStartのみ編集した場合もあるので loadBreakRecords() を呼ぶ
           loadBreakRecords();
-        }).catch(err => {
-          console.error("編集更新エラー:", err);
-        });
+        }
       }
     }
   </script>
