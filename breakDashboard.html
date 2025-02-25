@@ -3,22 +3,104 @@
 <head>
   <meta charset="UTF-8">
   <title>休憩管理システム</title>
-  <link rel="stylesheet" href="style.css">
+
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <!-- スマホ対応のメタタグ -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
   <style>
-    .button-group { margin-bottom: 20px; text-align: center; }
+    /* ベースのリセットとフォントサイズ */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+      background-color: #f5f5f7;
+      color: #1d1d1f;
+      line-height: 1.6;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* コンテナ: 幅を制限し、スマホでも中央に */
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    /* ヘッダー */
+    header {
+      text-align: center;
+      padding: 16px 0;
+    }
+    header h1 {
+      font-size: 24px;
+      font-weight: 600;
+    }
+
+    /* 上部の情報バー */
+    #breakSection > div:first-child {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    /* ボタン類 */
+    .button-group {
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .button-group button {
+      font-size: 16px;
+      padding: 10px 20px;
+      margin: 4px;
+      border: none;
+      border-radius: 6px;
+      background-color: #0071e3;
+      color: #fff;
+      cursor: pointer;
+    }
+    .button-group button:hover {
+      background-color: #005bb5;
+    }
+
+    /* ステータスメッセージ */
+    #statusMessage {
+      text-align: center;
+      color: green;
+      margin-top: 10px;
+    }
+
+    /* テーブル */
     #breakRecordsTable {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 20px;
+      margin-top: 16px;
     }
     #breakRecordsTable th, #breakRecordsTable td {
       border: 1px solid #d2d2d7;
-      padding: 8px;
+      padding: 12px;
       text-align: center;
+      font-size: 14px;
     }
+    #breakRecordsTable th {
+      background-color: #f5f5f7;
+    }
+
+    /* 合計表示 */
+    #totalBreakTime {
+      font-weight: bold;
+      margin-left: 4px;
+    }
+
+    /* カスタムモーダル（編集用） */
     .modal-overlay {
       position: fixed;
       top: 0; left: 0;
@@ -46,11 +128,20 @@
       justify-content: center;
       gap: 16px;
     }
-    /* ボタン押下後のステータス表示用 */
-    #statusMessage {
-      text-align: center;
-      color: green;
-      margin-top: 10px;
+
+    /* スマホ用のメディアクエリ */
+    @media (max-width: 480px) {
+      header h1 {
+        font-size: 20px;
+      }
+      .button-group button {
+        font-size: 14px;
+        padding: 8px 14px;
+      }
+      #breakRecordsTable th, #breakRecordsTable td {
+        font-size: 12px;
+        padding: 8px;
+      }
     }
   </style>
 </head>
@@ -60,7 +151,8 @@
       <h1>休憩管理システム</h1>
     </header>
     <section id="breakSection">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
+      <!-- 上部バー: ユーザー情報とログアウトボタン -->
+      <div>
         <span id="userInfo"></span>
         <button id="logoutBtn">ログアウト</button>
       </div>
@@ -81,14 +173,14 @@
           <tr>
             <th>休憩開始</th>
             <th>休憩終了</th>
-            <th>休憩時間（時間）</th>
+            <th>休憩時間（分）</th>
             <th>操作</th>
           </tr>
         </thead>
         <tbody id="recordsTableBody"></tbody>
       </table>
-      <div style="margin-top: 20px; text-align: right; font-weight: bold;">
-        合計休憩時間: <span id="totalBreakTime">0.00</span> 時間
+      <div style="margin-top: 16px; text-align: right;">
+        合計休憩時間（分）: <span id="totalBreakTime">0.00</span>
       </div>
     </section>
   </div>
@@ -107,7 +199,7 @@
   <script>
     // Firebase の設定
     const firebaseConfig = {
-      apiKey: "AIzaSyDzYAtr_PA8...",
+      apiKey: "AIzaSyDzYA...",
       authDomain: "kintaidakoku-21454.firebaseapp.com",
       projectId: "kintaidakoku-21454",
       storageBucket: "kintaidakoku-21454.firebasestorage.app",
@@ -118,7 +210,7 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // DOM要素取得
+    // DOM要素
     const userInfoSpan = document.getElementById("userInfo");
     const logoutBtn = document.getElementById("logoutBtn");
     const breakStartBtn = document.getElementById("breakStartBtn");
@@ -127,7 +219,7 @@
     const totalBreakTimeSpan = document.getElementById("totalBreakTime");
     const statusMessage = document.getElementById("statusMessage");
 
-    // モーダル関連
+    // モーダル要素
     const modalOverlay = document.getElementById("modalOverlay");
     const modalMessage = document.getElementById("modalMessage");
     const modalOkBtn = document.getElementById("modalOkBtn");
@@ -136,19 +228,19 @@
     let currentUser = null;
     let todayBreakRecords = [];
 
-    // ステータスメッセージ表示
+    // 簡易ステータスメッセージ
     function showStatus(msg) {
       statusMessage.textContent = msg;
-      // 数秒後にメッセージを消す
       setTimeout(() => {
         statusMessage.textContent = "";
       }, 2000);
     }
 
+    // ロード時にユーザー情報を確認
     window.onload = () => {
       const user = localStorage.getItem("currentUser");
       if (!user) {
-        window.location.href = "login_kyukei.html"; // ログイン画面へ
+        window.location.href = "login_kyukei.html";
       } else {
         currentUser = JSON.parse(user);
         userInfoSpan.textContent = "社員番号: " + currentUser.employeeNumber;
@@ -161,7 +253,7 @@
       window.location.href = "login_kyukei.html";
     });
 
-    // 休憩開始ボタン
+    // 休憩開始
     breakStartBtn.addEventListener("click", () => {
       const now = new Date();
       const record = {
@@ -180,7 +272,7 @@
         });
     });
 
-    // 休憩終了ボタン
+    // 休憩終了
     breakEndBtn.addEventListener("click", () => {
       const now = new Date();
       const record = {
@@ -203,6 +295,7 @@
     async function loadBreakRecords() {
       recordsTableBody.innerHTML = "";
       todayBreakRecords = [];
+
       const today = new Date();
       today.setHours(0,0,0,0);
       const tomorrow = new Date(today);
@@ -226,28 +319,25 @@
       calculateTotalBreakTime(grouped);
     }
 
-    // breakStart, breakEnd をペア化（未ペアのstartも表示）
+    // breakStart, breakEnd をペア化し、未ペアのstartも表示
     function groupBreakRecords(records) {
       let groups = [];
       let breakStartQueue = [];
 
-      // タイムスタンプ昇順で来るので、先入れ先出しでペアにする
       for (let r of records) {
         if (r.type === "breakStart") {
-          // 新しいstartを追加
           breakStartQueue.push(r);
         } else if (r.type === "breakEnd") {
-          // endが来た場合、キューの先頭をペアにする
           if (breakStartQueue.length > 0) {
             let start = breakStartQueue.shift();
             groups.push({ breakStart: start, breakEnd: r });
           } else {
-            // endだけが来た場合 -> start不明
+            // endだけ
             groups.push({ breakStart: null, breakEnd: r });
           }
         }
       }
-      // キューに残ったstartはendが無い -> partial row
+      // startが残っていたらendなし
       while (breakStartQueue.length > 0) {
         let s = breakStartQueue.shift();
         groups.push({ breakStart: s, breakEnd: null });
@@ -255,7 +345,7 @@
       return groups;
     }
 
-    // テーブルに表示
+    // テーブルに表示（分単位）
     function renderGroupedRecords(groups) {
       recordsTableBody.innerHTML = "";
       groups.forEach((group, index) => {
@@ -265,13 +355,15 @@
         let endTime = group.breakEnd
           ? group.breakEnd.timestamp.toDate().toLocaleTimeString()
           : "";
-        let duration = 0;
+
+        let durationMin = 0;
         if (group.breakStart && group.breakEnd) {
-          duration = (group.breakEnd.timestamp.toDate() - group.breakStart.timestamp.toDate()) / (1000 * 60 * 60);
+          let ms = group.breakEnd.timestamp.toDate() - group.breakStart.timestamp.toDate();
+          durationMin = ms / 1000 / 60; // 分
         }
-        // 小数2桁で丸め
-        duration = Math.round(duration * 100) / 100;
-        let durationStr = duration.toFixed(2);
+        // 小数点2桁に丸め
+        durationMin = Math.round(durationMin * 100) / 100;
+        let durationStr = durationMin.toFixed(2);
 
         let row = document.createElement("tr");
         row.innerHTML = `
@@ -284,18 +376,19 @@
       });
     }
 
-    // 合計休憩時間を計算
+    // 合計休憩時間（分）
     function calculateTotalBreakTime(groups) {
-      let total = 0;
+      let totalMin = 0;
       groups.forEach(group => {
         if (group.breakStart && group.breakEnd) {
-          let duration = (group.breakEnd.timestamp.toDate() - group.breakStart.timestamp.toDate()) / (1000 * 60 * 60);
-          duration = Math.round(duration * 100) / 100;
-          total += duration;
+          let ms = group.breakEnd.timestamp.toDate() - group.breakStart.timestamp.toDate();
+          let minutes = ms / 1000 / 60;
+          minutes = Math.round(minutes * 100) / 100;
+          totalMin += minutes;
         }
       });
-      total = Math.round(total * 100) / 100;
-      totalBreakTimeSpan.textContent = total.toFixed(2);
+      totalMin = Math.round(totalMin * 100) / 100;
+      totalBreakTimeSpan.textContent = totalMin.toFixed(2);
     }
 
     // 編集ボタン（簡易実装）
@@ -313,7 +406,6 @@
       }
 
       if (newStartStr || newEndStr) {
-        // 同日扱い
         let dateStr = (group.breakStart || group.breakEnd).timestamp.toDate().toLocaleDateString();
 
         if (group.breakStart && newStartStr) {
@@ -334,7 +426,7 @@
             console.error("編集更新エラー:", err);
           });
         } else {
-          // breakStartのみ編集した場合もあるので loadBreakRecords() を呼ぶ
+          // breakStartのみ変更した場合
           loadBreakRecords();
         }
       }
