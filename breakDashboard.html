@@ -26,12 +26,14 @@
       margin: 0;
       padding: 0;
     }
+
     /* コンテナ: 幅を制限し、スマホでも中央に */
     .container {
-      max-width: 600px; /* スマホでは600px */
+      max-width: 600px; /* スマホでは 600px 幅に */
       margin: 0 auto;
       padding: 16px;
     }
+
     /* ヘッダー */
     header {
       text-align: center;
@@ -41,6 +43,7 @@
       font-size: 24px;
       font-weight: 600;
     }
+
     /* 上部の情報バー */
     #breakSection > div:first-child {
       display: flex;
@@ -48,6 +51,7 @@
       align-items: center;
       margin-bottom: 16px;
     }
+
     /* ボタン類 */
     .button-group {
       text-align: center;
@@ -66,32 +70,38 @@
     .button-group button:hover {
       background-color: #005bb5;
     }
+
     /* ステータスメッセージ */
     #statusMessage {
       text-align: center;
       color: green;
       margin-top: 10px;
     }
+
     /* テーブル */
     #breakRecordsTable {
       width: 100%;
       border-collapse: collapse;
       margin-top: 16px;
     }
+    /* ここに white-space: nowrap; を追加 */
     #breakRecordsTable th, #breakRecordsTable td {
       border: 1px solid #d2d2d7;
       padding: 12px;
       text-align: center;
       font-size: 14px;
+      white-space: nowrap;
     }
     #breakRecordsTable th {
       background-color: #f5f5f7;
     }
+
     /* 合計表示 */
     #totalBreakTime {
       font-weight: bold;
       margin-left: 4px;
     }
+
     /* カスタムモーダル（編集用） */
     .modal-overlay {
       position: fixed;
@@ -120,6 +130,7 @@
       justify-content: center;
       gap: 16px;
     }
+
     /* スマホ用のメディアクエリ */
     @media (max-width: 480px) {
       header h1 {
@@ -134,6 +145,7 @@
         padding: 8px;
       }
     }
+
     /* PC版用スタイル（画面幅800px以上の場合） */
     @media (min-width: 800px) {
       .container {
@@ -164,11 +176,12 @@
       .modal-content {
         font-size: 20px;
       }
-      /* テーブル内のボタン（編集・削除）を大きくする */
+      /* テーブル内のボタン（編集・削除）を大きくし、横並びに */
       #breakRecordsTable td button {
         font-size: 16px;
         padding: 8px 18px;
         margin: 3px;
+        display: inline-block;
       }
     }
   </style>
@@ -242,20 +255,23 @@
       }
     }
 
-    // ヘルパー関数: ミリ秒の差を「〇時〇分〇秒」形式に整形（duration用）
+    // ヘルパー関数: ミリ秒を差分として「〇時〇分〇秒」形式に整形（duration用）
     function formatDurationFromMs(ms) {
       const totalSeconds = Math.floor(ms / 1000);
       const h = Math.floor(totalSeconds / 3600);
       const r = totalSeconds % 3600;
       const m = Math.floor(r / 60);
       const s = r % 60;
+      function padZero(num) {
+        return num.toString().padStart(2, '0');
+      }
       let result = "";
       if (h > 0) {
-        result += h + "時" + (m < 10 ? "0" : "") + m + "分" + (s < 10 ? "0" : "") + s + "秒";
+        result = h + "時" + padZero(m) + "分" + padZero(s) + "秒";
       } else if (m > 0) {
-        result += (m < 10 ? "0" : "") + m + "分" + (s < 10 ? "0" : "") + s + "秒";
+        result = padZero(m) + "分" + padZero(s) + "秒";
       } else {
-        result += (s < 10 ? "0" : "") + s + "秒";
+        result = padZero(s) + "秒";
       }
       return result;
     }
@@ -350,7 +366,7 @@
         });
     });
 
-    // 当日分の休憩記録読み込み
+    // 当日分の休憩記録を読み込み
     async function loadBreakRecords() {
       recordsTableBody.innerHTML = "";
       todayBreakRecords = [];
@@ -378,7 +394,7 @@
       calculateTotalBreakTime(grouped);
     }
 
-    // breakStart, breakEnd をペア化（未ペアのstartも表示）
+    // breakStart, breakEnd をペア化し、未ペアのstartも表示
     function groupBreakRecords(records) {
       let groups = [];
       let breakStartQueue = [];
@@ -412,7 +428,7 @@
         if (group.breakStart && group.breakEnd) {
           durationMs = group.breakEnd.timestamp.toDate() - group.breakStart.timestamp.toDate();
         }
-        let durationStr = group.breakStart && group.breakEnd ? formatDurationFromMs(durationMs) : "0秒";
+        let durationStr = (group.breakStart && group.breakEnd) ? formatDurationFromMs(durationMs) : "0秒";
 
         let row = document.createElement("tr");
         row.innerHTML = `
@@ -420,15 +436,17 @@
           <td>${endTime}</td>
           <td>${durationStr}</td>
           <td>
-            <button onclick="editGroup(${index})">編集</button>
-            <button onclick="deleteGroup(${index})">削除</button>
+            <div style="display:inline-flex; gap:8px;">
+              <button onclick="editGroup(${index})">編集</button>
+              <button onclick="deleteGroup(${index})">削除</button>
+            </div>
           </td>
         `;
         recordsTableBody.appendChild(row);
       });
     }
 
-    // 合計休憩時間（分）計算→合計もミリ秒の合計を計算してフォーマット
+    // 合計休憩時間（ミリ秒）計算→フォーマットして表示
     function calculateTotalBreakTime(groups) {
       let totalMs = 0;
       groups.forEach(group => {
@@ -439,7 +457,7 @@
       totalBreakTimeSpan.textContent = formatDurationFromMs(totalMs);
     }
 
-    // CSV用文字列生成（分単位、時刻は formatTime() で整形）
+    // CSV用文字列生成（時刻は formatTime() で整形、休憩時間は formatDurationFromMs()）
     function buildCSV(groups) {
       let csv = "社員番号,日付,休憩開始,休憩終了,休憩時間\n";
       groups.forEach(group => {
@@ -451,7 +469,7 @@
         if (group.breakStart && group.breakEnd) {
           durationMs = group.breakEnd.timestamp.toDate() - group.breakStart.timestamp.toDate();
         }
-        let durationStr = group.breakStart && group.breakEnd ? formatDurationFromMs(durationMs) : "0秒";
+        let durationStr = (group.breakStart && group.breakEnd) ? formatDurationFromMs(durationMs) : "0秒";
         csv += `${userId},${dateStr},${breakStartStr},${breakEndStr},${durationStr}\n`;
       });
       return csv;
