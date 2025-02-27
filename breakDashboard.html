@@ -129,6 +129,15 @@
       justify-content: center;
       gap: 16px;
     }
+    /* 新規追加行のハイライト用アニメーション */
+    @keyframes highlight-fade {
+      0%   { background-color: #ffff9c; } /* 薄い黄色 */
+      100% { background-color: transparent; }
+    }
+    .highlight-row {
+      animation: highlight-fade 3s forwards;
+    }
+    
     /* スマホ用のメディアクエリ */
     @media (max-width: 480px) {
       .container {
@@ -228,7 +237,7 @@
     </section>
   </div>
 
-  <!-- 編集用カスタムモーダル (OKボタンのみ) -->
+  <!-- 編集用カスタムモーダル (OKのみ) -->
   <div id="modalOverlay" class="modal-overlay">
     <div class="modal-content">
       <p id="modalMessage">ここにメッセージが入ります</p>
@@ -294,8 +303,7 @@
 
     // モーダル表示/非表示用の共通関数
     function showModal(message, onOk) {
-      // 改行を反映したいので innerHTML を使う (必要に応じて <br> を埋め込む)
-      modalMessage.innerHTML = message;
+      modalMessage.innerHTML = message; // <br> などHTMLタグを使う場合はinnerHTML
       modalOverlay.classList.add("active");
 
       // OKボタン押下時
@@ -349,13 +357,16 @@
 
         // ここまできたら休憩開始処理OK
         const now = new Date();
-        await db.collection("breakRecords").add({
+        // Firestoreに追加し、docRef.idを取得
+        const docRef = await db.collection("breakRecords").add({
           userId: currentUser.employeeNumber,
           startTime: firebase.firestore.Timestamp.fromDate(now),
           endTime: null
         });
+
         showStatus("休憩開始を記録しました。");
-        loadBreakRecords();
+        // 新しく追加されたドキュメントIDを引数に渡してロード
+        loadBreakRecords(docRef.id);
 
       } catch (err) {
         console.error("休憩開始エラー:", err);
@@ -375,7 +386,7 @@
           .get();
 
         if (qSnap.empty) {
-          // 休憩中でないのに休憩終了を押した → モーダル表示 (改行を <br> で)
+          // 休憩中でないのに休憩終了を押した → モーダル表示
           showModal(
             "現在休憩中ではありません。<br>連続で終了ボタンを押すことはできません。"
           );
@@ -396,8 +407,11 @@
       }
     });
 
-    // 当日分の休憩記録を読み込み・表示
-    async function loadBreakRecords() {
+    /**
+     * 当日分の休憩記録を読み込み・表示
+     * @param {string} [highlightId] - 新規追加行をハイライトさせるドキュメントID(任意)
+     */
+    async function loadBreakRecords(highlightId) {
       recordsTableBody.innerHTML = "";
       let totalMs = 0;
 
@@ -432,6 +446,12 @@
 
         // テーブルに行を追加
         const tr = document.createElement("tr");
+
+        // 新しく追加された docId と一致すれば、ハイライトクラスを付与
+        if (highlightId && docId === highlightId) {
+          tr.classList.add("highlight-row");
+        }
+
         tr.innerHTML = `
           <td>${startStr}</td>
           <td>${endStr}</td>
