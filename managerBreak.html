@@ -3,12 +3,43 @@
 <head>
   <meta charset="UTF-8">
   <title>管理者ダッシュボード - 休憩記録</title>
-  <link rel="stylesheet" href="style.css">
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
   <style>
-    /* 管理者画面用スタイル（CodeBを参考） */
+    /* 管理者画面用スタイル */
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    }
+    header h1 {
+      text-align: center;
+      font-size: 24px;
+      margin-bottom: 20px;
+      font-weight: 600;
+    }
+    #managerSection > div:first-child {
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #managerInfo {
+      font-weight: 600;
+      font-size: 16px;
+    }
+    #logoutBtn {
+      font-size: 16px;
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      background-color: #0071e3;
+      color: #fff;
+      cursor: pointer;
+    }
     .search-card {
       background-color: #fefefe;
       border: 1px solid #d2d2d7;
@@ -42,6 +73,13 @@
     }
     .search-row button {
       margin-top: 0;
+      font-size: 16px;
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      background-color: #0071e3;
+      color: #fff;
+      cursor: pointer;
     }
     table {
       width: 100%;
@@ -75,22 +113,19 @@
       padding: 10px 16px;
       font-size: 16px;
       border-radius: 6px;
+      border: none;
+      background-color: #ccc;
+      cursor: pointer;
     }
-    #managerSection > div:first-child {
-      margin-bottom: 20px;
-    }
-    #managerInfo {
-      font-weight: 600;
-      font-size: 16px;
-    }
-    #downloadCSVBtn {
-      margin-top: 8px;
-    }
+
     /* スマホ用のメディアクエリ */
     @media (max-width: 480px) {
       .container {
         max-width: 100%;
         padding: 8px;
+      }
+      header h1 {
+        font-size: 20px;
       }
       .search-card h3 {
         font-size: 18px;
@@ -104,7 +139,12 @@
         font-size: 12px;
         padding: 8px;
       }
+      .paging-buttons button {
+        font-size: 14px;
+        padding: 8px 12px;
+      }
     }
+
     /* PC版用スタイル（画面幅800px以上の場合） */
     @media (min-width: 800px) {
       .container {
@@ -144,11 +184,14 @@
     <header>
       <h1>管理者ダッシュボード - 休憩記録</h1>
     </header>
+
     <section id="managerSection">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
+      <!-- ログイン情報＆ログアウトボタン -->
+      <div>
         <span id="managerInfo"></span>
         <button id="logoutBtn">ログアウト</button>
       </div>
+
       <!-- 検索・フィルタエリア -->
       <div class="search-card">
         <h3>検索 / フィルタ</h3>
@@ -176,6 +219,7 @@
           <button id="downloadCSVBtn">CSVダウンロード</button>
         </div>
       </div>
+
       <!-- 一覧テーブル -->
       <table id="recordsTable">
         <thead>
@@ -189,6 +233,7 @@
         </thead>
         <tbody id="recordsTableBody"></tbody>
       </table>
+
       <!-- ページングボタン -->
       <div class="paging-buttons">
         <button id="prevPageBtn" disabled>前へ</button>
@@ -198,45 +243,30 @@
   </div>
 
   <script>
-    // ヘルパー関数: 日付オブジェクトを「〇時〇分〇秒」形式に整形
+    // ヘルパー関数: 時刻を "HH:MM:SS" や "未終了" に整形
     function formatTime(date) {
-      let h = date.getHours();
-      let m = date.getMinutes();
-      let s = date.getSeconds();
-      function padZero(num) {
-        return num.toString().padStart(2, '0');
-      }
-      if (h > 0) {
-        return h + "時" + padZero(m) + "分" + padZero(s) + "秒";
-      } else if (m > 0) {
-        return padZero(m) + "分" + padZero(s) + "秒";
-      } else {
-        return padZero(s) + "秒";
-      }
+      if (!date) return "未終了";
+      const h = String(date.getHours()).padStart(2, '0');
+      const m = String(date.getMinutes()).padStart(2, '0');
+      const s = String(date.getSeconds()).padStart(2, '0');
+      return `${h}:${m}:${s}`;
     }
 
-    // ヘルパー関数: 休憩時間（ミリ秒の差）を「〇時〇分〇秒」形式に整形
+    // ヘルパー関数: 休憩時間（ミリ秒差）を「○時○分○秒」形式に変換
     function formatDurationFromMs(ms) {
-      const totalSeconds = Math.floor(ms / 1000);
-      const h = Math.floor(totalSeconds / 3600);
-      const r = totalSeconds % 3600;
-      const m = Math.floor(r / 60);
-      const s = r % 60;
-      function padZero(num) {
-        return num.toString().padStart(2, '0');
-      }
+      const totalSec = Math.floor(ms / 1000);
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      const s = totalSec % 60;
+      const pad = (num) => String(num).padStart(2, '0');
       let result = "";
-      if (h > 0) {
-        result = h + "時" + padZero(m) + "分" + padZero(s) + "秒";
-      } else if (m > 0) {
-        result = padZero(m) + "分" + padZero(s) + "秒";
-      } else {
-        result = padZero(s) + "秒";
-      }
+      if (h > 0) result += `${h}時`;
+      if (h > 0 || m > 0) result += `${pad(m)}分`;
+      result += `${pad(s)}秒`;
       return result;
     }
 
-    // Firebase の設定
+    // Firebaseの初期化
     const firebaseConfig = {
       apiKey: "AIzaSyDzYAatr_PA8cfibICKwb3KZA6xyeNDHtjY",
       authDomain: "kintaidakoku-21454.firebaseapp.com",
@@ -249,28 +279,32 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // DOM要素取得
+    // DOM要素
     const managerInfoSpan = document.getElementById("managerInfo");
     const logoutBtn = document.getElementById("logoutBtn");
+
     const searchEmployeeNumberInput = document.getElementById("searchEmployeeNumber");
     const startDateInput = document.getElementById("startDate");
     const endDateInput = document.getElementById("endDate");
     const sortSelect = document.getElementById("sortSelect");
     const searchBtn = document.getElementById("searchBtn");
     const downloadCSVBtn = document.getElementById("downloadCSVBtn");
+
     const recordsTableBody = document.getElementById("recordsTableBody");
     const prevPageBtn = document.getElementById("prevPageBtn");
     const nextPageBtn = document.getElementById("nextPageBtn");
 
     let currentManager = null;
-    const pageSize = 50;
-    let lastVisible = null;
-    let firstVisible = null;
-    let prevStack = [];
+    const pageSize = 50;       // 1ページあたりの表示件数
+    let lastVisible = null;    // 次ページ読み込みに使う
+    let firstVisible = null;   // 前ページ読み込みに使う
+    let prevStack = [];        // 前ページに戻る用のスタック
 
+    // ログイン状態チェック
     window.onload = () => {
       const mgr = localStorage.getItem("currentManager");
       if (!mgr) {
+        // 未ログインならログイン画面へ
         window.location.href = "managerLogin.html";
       } else {
         currentManager = JSON.parse(mgr);
@@ -279,79 +313,105 @@
       }
     };
 
+    // ログアウト
     logoutBtn.addEventListener("click", () => {
       localStorage.removeItem("currentManager");
       window.location.href = "managerLogin.html";
     });
 
+    // 検索ボタン
     searchBtn.addEventListener("click", () => {
+      // ページング情報をリセット
       lastVisible = null;
       firstVisible = null;
       prevStack = [];
       loadRecords();
     });
 
+    // 次へボタン
     nextPageBtn.addEventListener("click", () => {
-      prevStack.push(firstVisible);
-      loadRecords("next");
+      if (lastVisible) {
+        prevStack.push(firstVisible);
+        loadRecords("next");
+      }
     });
 
+    // 前へボタン
     prevPageBtn.addEventListener("click", () => {
-      const prevPoint = prevStack.pop();
-      loadRecords("prev", prevPoint);
+      if (prevStack.length > 0) {
+        const prevPoint = prevStack.pop();
+        loadRecords("prev", prevPoint);
+      }
     });
 
-    // クエリ生成（検索・ソート）※休憩記録コレクション: breakRecords
+    // クエリ組み立て
     function buildQuery() {
       let empNo = searchEmployeeNumberInput.value.trim();
       let startDateVal = startDateInput.value;
       let endDateVal = endDateInput.value;
       let sortOption = sortSelect.value;
 
+      // コレクションは「breakRecords」想定: 各ドキュメントが { userId, startTime, endTime }
       let baseQuery = db.collection("breakRecords");
 
+      // 社員番号フィルタ
       if (empNo) {
         baseQuery = baseQuery.where("userId", "==", empNo);
       }
+
+      // 日付フィルタ (startTime基準)
       if (startDateVal) {
+        // 選択日付の 0:00
         const sDate = new Date(startDateVal);
         sDate.setHours(0,0,0,0);
-        baseQuery = baseQuery.where("timestamp", ">=", firebase.firestore.Timestamp.fromDate(sDate));
+        baseQuery = baseQuery.where("startTime", ">=", firebase.firestore.Timestamp.fromDate(sDate));
       }
       if (endDateVal) {
+        // 選択日付の翌日 0:00
         const eDate = new Date(endDateVal);
-        eDate.setHours(24,0,0,0);
-        baseQuery = baseQuery.where("timestamp", "<", firebase.firestore.Timestamp.fromDate(eDate));
+        eDate.setDate(eDate.getDate() + 1);
+        eDate.setHours(0,0,0,0);
+        baseQuery = baseQuery.where("startTime", "<", firebase.firestore.Timestamp.fromDate(eDate));
       }
 
+      // 並べ替え
+      // Firestoreで複数 orderBy を使用する場合は、複合インデックスが必要になることがあります。
       switch (sortOption) {
         case "userIdAsc":
-          baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
+          // ユーザーID昇順 → 同順の場合はstartTime昇順
+          baseQuery = baseQuery.orderBy("userId", "asc").orderBy("startTime", "asc");
           break;
         case "userIdDesc":
-          baseQuery = baseQuery.orderBy("timestamp", "desc").orderBy("userId", "desc");
-          break;
-        case "dateAsc":
-          baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
+          // ユーザーID降順 → 同順の場合はstartTime降順
+          baseQuery = baseQuery.orderBy("userId", "desc").orderBy("startTime", "desc");
           break;
         case "dateDesc":
-          baseQuery = baseQuery.orderBy("timestamp", "desc").orderBy("userId", "desc");
+          // 日付降順 (startTime降順) → 同日ならuserId降順
+          baseQuery = baseQuery.orderBy("startTime", "desc").orderBy("userId", "desc");
           break;
+        case "dateAsc":
         default:
-          baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
+          // 日付昇順 (startTime昇順) → 同日ならuserId昇順
+          baseQuery = baseQuery.orderBy("startTime", "asc").orderBy("userId", "asc");
+          break;
       }
-      return { baseQuery };
+
+      return baseQuery;
     }
 
-    // レコード読み込み＆ペアリング：休憩開始と休憩終了を1セットとしてまとめる
+    // レコード読み込み
     async function loadRecords(direction = "init", prevPoint = null) {
       recordsTableBody.innerHTML = "";
-      const { baseQuery } = buildQuery();
+
+      let baseQuery = buildQuery();
       let query = baseQuery.limit(pageSize);
 
+      // 次ページ
       if (direction === "next" && lastVisible) {
         query = query.startAfter(lastVisible);
-      } else if (direction === "prev" && prevPoint) {
+      }
+      // 前ページ
+      else if (direction === "prev" && prevPoint) {
         query = query.endBefore(prevPoint).limitToLast(pageSize);
       }
 
@@ -365,83 +425,56 @@
         return;
       }
 
-      let firstDoc = snapshot.docs[0];
-      let lastDoc = snapshot.docs[snapshot.docs.length - 1];
-      firstVisible = firstDoc;
-      lastVisible = lastDoc;
+      let docs = snapshot.docs;
+      firstVisible = docs[0];
+      lastVisible = docs[docs.length - 1];
 
+      // 配列にまとめる
       let records = [];
-      snapshot.forEach(doc => {
+      docs.forEach(doc => {
         let data = doc.data();
-        data.id = doc.id;
+        data._id = doc.id;
         records.push(data);
       });
 
-      let pairs = pairBreakRecords(records);
-      renderRecordsAsPairs(pairs);
+      renderRecords(records);
 
-      nextPageBtn.disabled = (snapshot.size < pageSize);
+      // ページングボタンの制御
+      // 次へ: 今回取得数 < pageSize なら最後まで到達
+      nextPageBtn.disabled = (docs.length < pageSize);
+      // 前へ: prevStackが空＆今が「初期or検索直後」なら戻れない
       prevPageBtn.disabled = (prevStack.length === 0 && direction !== "next");
     }
 
-    // シーケンシャルに休憩開始と休憩終了をペアリング
-    function pairBreakRecords(records) {
-      // timestamp 昇順になっている前提
-      let pairs = [];
-      let startQueue = [];
-      for (let r of records) {
-        if (r.type === "breakStart") {
-          startQueue.push(r);
-        } else if (r.type === "breakEnd") {
-          if (startQueue.length > 0) {
-            let s = startQueue.shift();
-            pairs.push({
-              userId: s.userId,
-              start: s,
-              end: r
-            });
-          } else {
-            pairs.push({
-              userId: r.userId,
-              start: null,
-              end: r
-            });
-          }
-        }
-      }
-      while (startQueue.length > 0) {
-        let s = startQueue.shift();
-        pairs.push({
-          userId: s.userId,
-          start: s,
-          end: null
-        });
-      }
-      return pairs;
-    }
-
-    // テーブル表示（ペアごとに「社員番号, 日付, 休憩開始時刻, 休憩終了時刻, 休憩時間」）
-    function renderRecordsAsPairs(pairs) {
+    // テーブル描画
+    function renderRecords(records) {
       recordsTableBody.innerHTML = "";
-      pairs.forEach(p => {
-        // 日付は start があればそれを、なければ end の日付を使用
-        let dateObj = p.start 
-          ? p.start.timestamp.toDate() 
-          : (p.end ? p.end.timestamp.toDate() : null);
-        let dateStr = dateObj ? dateObj.toLocaleDateString() : "-";
-        let breakStartStr = p.start ? formatTime(p.start.timestamp.toDate()) : "-";
-        let breakEndStr = p.end ? formatTime(p.end.timestamp.toDate()) : "-";
-        let durationStr = "-";
-        if (p.start && p.end) {
-          let ms = p.end.timestamp.toDate() - p.start.timestamp.toDate();
+
+      records.forEach(rec => {
+        let userId = rec.userId || "-";
+        // startTime, endTime は Timestamp
+        let start = rec.startTime ? rec.startTime.toDate() : null;
+        let end = rec.endTime ? rec.endTime.toDate() : null;
+
+        // 日付は startTime があればそれを基準に表示
+        let dateStr = start ? start.toLocaleDateString() : "-";
+
+        let startStr = start ? formatTime(start) : "-";
+        let endStr = end ? formatTime(end) : "未終了";
+
+        // 休憩時間計算
+        let durationStr = "0秒";
+        if (start && end) {
+          let ms = end - start;
           durationStr = formatDurationFromMs(ms);
         }
+
         let row = document.createElement("tr");
         row.innerHTML = `
-          <td>${p.userId}</td>
+          <td>${userId}</td>
           <td>${dateStr}</td>
-          <td>${breakStartStr}</td>
-          <td>${breakEndStr}</td>
+          <td>${startStr}</td>
+          <td>${endStr}</td>
           <td>${durationStr}</td>
         `;
         recordsTableBody.appendChild(row);
@@ -450,21 +483,35 @@
 
     // CSVダウンロード
     downloadCSVBtn.addEventListener("click", async () => {
-      let { baseQuery } = buildQuery();
+      let baseQuery = buildQuery();
+      // 絞り込みの全データを取得する (件数が多い場合は注意)
       const snapshot = await baseQuery.get();
       if (snapshot.empty) {
         alert("ダウンロード対象のデータがありません。");
         return;
       }
-      let records = [];
+
+      let csv = "社員番号,日付,休憩開始時刻,休憩終了時刻,休憩時間\n";
       snapshot.forEach(doc => {
         let data = doc.data();
-        data.id = doc.id;
-        records.push(data);
+        let userId = data.userId || "";
+        let start = data.startTime ? data.startTime.toDate() : null;
+        let end = data.endTime ? data.endTime.toDate() : null;
+
+        let dateStr = start ? start.toLocaleDateString() : "";
+        let startStr = start ? formatTime(start) : "";
+        let endStr = end ? formatTime(end) : "";
+        let durationStr = "";
+        if (start && end) {
+          let ms = end - start;
+          durationStr = formatDurationFromMs(ms);
+        }
+
+        csv += `${userId},${dateStr},${startStr},${endStr},${durationStr}\n`;
       });
-      let pairs = pairBreakRecords(records);
-      let csvContent = buildCSVAsPairs(pairs);
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+
+      // CSV ダウンロード
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.setAttribute("href", url);
@@ -474,26 +521,6 @@
       link.click();
       document.body.removeChild(link);
     });
-
-    // CSV用文字列生成（ペアリング後）
-    function buildCSVAsPairs(pairs) {
-      let csv = "社員番号,日付,休憩開始時刻,休憩終了時刻,休憩時間\n";
-      pairs.forEach(p => {
-        let dateObj = p.start 
-          ? p.start.timestamp.toDate() 
-          : (p.end ? p.end.timestamp.toDate() : null);
-        let dateStr = dateObj ? dateObj.toLocaleDateString() : "";
-        let breakStartStr = p.start ? formatTime(p.start.timestamp.toDate()) : "";
-        let breakEndStr = p.end ? formatTime(p.end.timestamp.toDate()) : "";
-        let durationStr = "";
-        if (p.start && p.end) {
-          let ms = p.end.timestamp.toDate() - p.start.timestamp.toDate();
-          durationStr = formatDurationFromMs(ms);
-        }
-        csv += `${p.userId},${dateStr},${breakStartStr},${breakEndStr},${durationStr}\n`;
-      });
-      return csv;
-    }
   </script>
 </body>
 </html>
