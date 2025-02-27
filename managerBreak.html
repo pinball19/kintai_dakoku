@@ -76,7 +76,6 @@
       font-size: 16px;
       border-radius: 6px;
     }
-    /* ヘッダー部分 */
     #managerSection > div:first-child {
       margin-bottom: 20px;
     }
@@ -84,7 +83,6 @@
       font-weight: 600;
       font-size: 16px;
     }
-    /* CSVダウンロードボタン */
     #downloadCSVBtn {
       margin-top: 8px;
     }
@@ -303,14 +301,14 @@
       loadRecords("prev", prevPoint);
     });
 
-    // クエリ生成（検索・ソート）
+    // クエリ生成（検索・ソート）※今回は休憩記録用
     function buildQuery() {
       let empNo = searchEmployeeNumberInput.value.trim();
       let startDateVal = startDateInput.value;
       let endDateVal = endDateInput.value;
       let sortOption = sortSelect.value;
 
-      let baseQuery = db.collection("breakRecords"); // 休憩記録用
+      let baseQuery = db.collection("breakRecords");
 
       if (empNo) {
         baseQuery = baseQuery.where("userId", "==", empNo);
@@ -325,7 +323,6 @@
         eDate.setHours(24,0,0,0);
         baseQuery = baseQuery.where("timestamp", "<", firebase.firestore.Timestamp.fromDate(eDate));
       }
-
       switch (sortOption) {
         case "userIdAsc":
           baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
@@ -343,78 +340,6 @@
           baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
       }
       return { baseQuery };
-    }
-
-    // 同一社員・同一日の休憩記録をグループ化し、各グループで最も早い休憩開始、最も遅い休憩終了、合計休憩時間を算出
-    function groupBreakRecordsAdmin(records) {
-      let groups = {};
-      records.forEach(r => {
-        let userId = r.userId;
-        let dateStr = r.timestamp.toDate().toLocaleDateString();
-        let key = userId + "_" + dateStr;
-        if (!groups[key]) {
-          groups[key] = {
-            userId: userId,
-            dateStr: dateStr,
-            breakStartTimes: [],
-            breakEndTimes: [],
-            totalDurationMs: 0
-          };
-        }
-        if (r.type === "breakStart") {
-          groups[key].breakStartTimes.push(r.timestamp.toDate());
-        } else if (r.type === "breakEnd") {
-          groups[key].breakEndTimes.push(r.timestamp.toDate());
-        }
-      });
-      let result = [];
-      Object.keys(groups).forEach(key => {
-        let group = groups[key];
-        if (group.breakStartTimes.length > 0 && group.breakEndTimes.length > 0) {
-          let earliestStart = new Date(Math.min(...group.breakStartTimes));
-          let latestEnd = new Date(Math.max(...group.breakEndTimes));
-          group.breakStart = earliestStart;
-          group.breakEnd = latestEnd;
-          group.totalDurationMs = latestEnd - earliestStart;
-        } else {
-          group.breakStart = group.breakStartTimes.length > 0 ? new Date(Math.min(...group.breakStartTimes)) : null;
-          group.breakEnd = group.breakEndTimes.length > 0 ? new Date(Math.max(...group.breakEndTimes)) : null;
-          group.totalDurationMs = group.breakStart && group.breakEnd ? group.breakEnd - group.breakStart : 0;
-        }
-        result.push(group);
-      });
-      return result;
-    }
-
-    // テーブル表示（管理者用：休憩記録）
-    function renderGroupedRecordsAdmin(grouped) {
-      recordsTableBody.innerHTML = "";
-      grouped.forEach(obj => {
-        let breakStartStr = obj.breakStart ? formatTime(obj.breakStart) : "-";
-        let breakEndStr = obj.breakEnd ? formatTime(obj.breakEnd) : "-";
-        let durationStr = obj.totalDurationMs ? formatDurationFromMs(obj.totalDurationMs) : "-";
-        let row = document.createElement("tr");
-        row.innerHTML = `
-          <td>${obj.userId}</td>
-          <td>${obj.dateStr}</td>
-          <td>${breakStartStr}</td>
-          <td>${breakEndStr}</td>
-          <td>${durationStr}</td>
-        `;
-        recordsTableBody.appendChild(row);
-      });
-    }
-
-    // CSV用文字列生成（管理者用：休憩記録）
-    function buildCSV(grouped) {
-      let csv = "社員番号,日付,休憩開始,休憩終了,休憩時間\n";
-      grouped.forEach(obj => {
-        let breakStartStr = obj.breakStart ? formatTime(obj.breakStart) : "";
-        let breakEndStr = obj.breakEnd ? formatTime(obj.breakEnd) : "";
-        let durationStr = obj.totalDurationMs ? formatDurationFromMs(obj.totalDurationMs) : "";
-        csv += `${obj.userId},${obj.dateStr},${breakStartStr},${breakEndStr},${durationStr}\n`;
-      });
-      return csv;
     }
 
     // ページネーションとレコード読み込み
@@ -451,11 +376,81 @@
         records.push(data);
       });
 
-      let grouped = groupBreakRecordsAdmin(records);
+      // ※グループ化は行わず、シーケンシャルにペアを組む
+      let grouped = groupBreakRecords(records);
       renderGroupedRecordsAdmin(grouped);
 
       nextPageBtn.disabled = (snapshot.size < pageSize);
       prevPageBtn.disabled = (prevStack.length === 0 && direction !== "next");
+    }
+
+    // 休憩記録を順次ペア化する関数（出退勤の管理画面と同様の形式ではなく、各セットをそのまま表示）
+    function groupBreakRecords(records) {
+      let groups = [];
+      let breakStartQueue = [];
+      for (let r of records) {
+        if (r.type === "breakStart") {
+          breakStartQueue.push(r);
+        } else if (r.type === "breakEnd") {
+          if (breakStartQueue.length > 0) {
+            let start = breakStartQueue.shift();
+            groups.push({ breakStart: start, breakEnd: r });
+          } else {
+            groups.push({ breakStart: null, breakEnd: r });
+          }
+        }
+      }
+      while (breakStartQueue.length > 0) {
+        let s = breakStartQueue.shift();
+        groups.push({ breakStart: s, breakEnd: null });
+      }
+      return groups;
+    }
+
+    // 管理者用テーブル表示（各セットごとに表示）
+    function renderGroupedRecordsAdmin(grouped) {
+      recordsTableBody.innerHTML = "";
+      grouped.forEach(obj => {
+        // 日付は breakStart の日付があればそれを、なければ breakEnd の日付
+        let dateStr = obj.breakStart 
+            ? obj.breakStart.timestamp.toDate().toLocaleDateString() 
+            : (obj.breakEnd ? obj.breakEnd.timestamp.toDate().toLocaleDateString() : "-");
+        let breakStartStr = obj.breakStart ? formatTime(obj.breakStart.timestamp.toDate()) : "-";
+        let breakEndStr = obj.breakEnd ? formatTime(obj.breakEnd.timestamp.toDate()) : "-";
+        let durationStr = "-";
+        if (obj.breakStart && obj.breakEnd) {
+          let ms = obj.breakEnd.timestamp.toDate() - obj.breakStart.timestamp.toDate();
+          durationStr = formatDurationFromMs(ms);
+        }
+        let row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${obj.userId}</td>
+          <td>${dateStr}</td>
+          <td>${breakStartStr}</td>
+          <td>${breakEndStr}</td>
+          <td>${durationStr}</td>
+        `;
+        recordsTableBody.appendChild(row);
+      });
+    }
+
+    // CSV用文字列生成（管理者用：休憩記録）
+    function buildCSV(grouped) {
+      let csv = "社員番号,日付,休憩開始,休憩終了,休憩時間\n";
+      grouped.forEach(obj => {
+        let dateStr = obj.breakStart 
+            ? obj.breakStart.timestamp.toDate().toLocaleDateString() 
+            : (obj.breakEnd ? obj.breakEnd.timestamp.toDate().toLocaleDateString() : "");
+        let breakStartStr = obj.breakStart ? formatTime(obj.breakStart.timestamp.toDate()) : "";
+        let breakEndStr = obj.breakEnd ? formatTime(obj.breakEnd.timestamp.toDate()) : "";
+        let durationStr = "";
+        if (obj.breakStart && obj.breakEnd) {
+          let ms = obj.breakEnd.timestamp.toDate() - obj.breakStart.timestamp.toDate();
+          durationStr = formatDurationFromMs(ms);
+        }
+        csv += `${obj.userId},${dateStr},${breakStartStr},${breakEndStr},${durationStr}\n`;
+      });
+      return csv;
     }
 
     nextPageBtn.addEventListener("click", () => {
@@ -468,7 +463,6 @@
       loadRecords("prev", prevPoint);
     });
 
-    // CSVダウンロード
     downloadCSVBtn.addEventListener("click", async () => {
       let { baseQuery } = buildQuery();
       const snapshot = await baseQuery.get();
@@ -482,7 +476,7 @@
         data.id = doc.id;
         records.push(data);
       });
-      let grouped = groupBreakRecordsAdmin(records);
+      let grouped = groupBreakRecords(records);
       let csvContent = buildCSV(grouped);
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
