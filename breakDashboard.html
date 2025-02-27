@@ -102,7 +102,8 @@
     /* カスタムモーダル（編集用） */
     .modal-overlay {
       position: fixed;
-      top: 0; left: 0;
+      top: 0; 
+      left: 0;
       width: 100%;
       height: 100%;
       background-color: rgba(0, 0, 0, 0.5);
@@ -241,7 +242,6 @@
   <script>
     // 日付や時間の整形用ヘルパー関数
     function formatTime(date) {
-      // 「時:分:秒」をゼロ埋めで返す
       const h = String(date.getHours()).padStart(2, '0');
       const m = String(date.getMinutes()).padStart(2, '0');
       const s = String(date.getSeconds()).padStart(2, '0');
@@ -288,11 +288,28 @@
     const totalBreakTimeSpan = document.getElementById("totalBreakTime");
     const statusMessage = document.getElementById("statusMessage");
 
-    // モーダル要素（編集などで使う場合）
+    // モーダル要素
     const modalOverlay = document.getElementById("modalOverlay");
     const modalMessage = document.getElementById("modalMessage");
     const modalOkBtn = document.getElementById("modalOkBtn");
     const modalCancelBtn = document.getElementById("modalCancelBtn");
+
+    // モーダル表示/非表示用の共通関数
+    function showModal(message, onOk, onCancel) {
+      modalMessage.textContent = message;
+      modalOverlay.classList.add("active");
+
+      // OKボタン押下時
+      modalOkBtn.onclick = () => {
+        modalOverlay.classList.remove("active");
+        if (onOk) onOk();
+      };
+      // キャンセルボタン押下時
+      modalCancelBtn.onclick = () => {
+        modalOverlay.classList.remove("active");
+        if (onCancel) onCancel();
+      };
+    }
 
     let currentUser = null;
 
@@ -318,43 +335,70 @@
       window.location.href = "login_kyukei.html";
     });
 
-    // 休憩開始 (ドキュメントを新規作成し、startTime のみ記録)
+    // 休憩開始
     breakStartBtn.addEventListener("click", async () => {
       try {
+        // まだ終了していない休憩(= endTimeがnull)があるか確認
+        const qSnap = await db.collection("breakRecords")
+          .where("userId", "==", currentUser.employeeNumber)
+          .where("endTime", "==", null)
+          .limit(1)
+          .get();
+
+        if (!qSnap.empty) {
+          // 休憩中にも関わらず再度休憩開始しようとした → モーダル表示
+          showModal(
+            "すでに休憩中です。連続で開始ボタンを押すことはできません。",
+            () => { /* OK押下時の追加処理(必要なら) */ },
+            () => { /* キャンセル押下時の追加処理(必要なら) */ }
+          );
+          return;
+        }
+
+        // ここまできたら休憩開始処理OK
         const now = new Date();
         await db.collection("breakRecords").add({
           userId: currentUser.employeeNumber,
           startTime: firebase.firestore.Timestamp.fromDate(now),
-          endTime: null // 休憩終了時刻は後で更新
+          endTime: null
         });
         showStatus("休憩開始を記録しました。");
         loadBreakRecords();
+
       } catch (err) {
         console.error("休憩開始エラー:", err);
         showStatus("休憩開始エラーが発生しました。");
       }
     });
 
-    // 休憩終了 (endTime == null のドキュメントを検索して endTime を更新)
+    // 休憩終了
     breakEndBtn.addEventListener("click", async () => {
       try {
-        // まだ終了していない休憩(= endTimeがnull)があれば更新
+        // まだ終了していない休憩(= endTimeがnull)を検索
         const qSnap = await db.collection("breakRecords")
           .where("userId", "==", currentUser.employeeNumber)
           .where("endTime", "==", null)
-          .orderBy("startTime", "desc") // 最新の休憩
+          .orderBy("startTime", "desc")
           .limit(1)
           .get();
-        if (!qSnap.empty) {
-          const docRef = qSnap.docs[0].ref;
-          await docRef.update({
-            endTime: firebase.firestore.Timestamp.fromDate(new Date())
-          });
-          showStatus("休憩終了を記録しました。");
-        } else {
-          showStatus("まだ休憩開始が記録されていません。");
+
+        if (qSnap.empty) {
+          // 休憩中でないのに休憩終了を押した → モーダル表示
+          showModal(
+            "現在休憩中ではありません。連続で終了ボタンを押すことはできません。",
+            () => { /* OK押下時の追加処理(必要なら) */ }
+          );
+          return;
         }
+
+        // ここまできたら休憩終了処理OK
+        const docRef = qSnap.docs[0].ref;
+        await docRef.update({
+          endTime: firebase.firestore.Timestamp.fromDate(new Date())
+        });
+        showStatus("休憩終了を記録しました。");
         loadBreakRecords();
+
       } catch (err) {
         console.error("休憩終了エラー:", err);
         showStatus("休憩終了エラーが発生しました。");
@@ -366,13 +410,12 @@
       recordsTableBody.innerHTML = "";
       let totalMs = 0;
 
-      // 当日の0:00～翌日の0:00
       const today = new Date();
       today.setHours(0,0,0,0);
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
 
-      // クエリ：当日分のみ取得(ユーザーIDで絞る)
+      // 当日分のみ取得(ユーザーIDで絞り)
       const snapshot = await db.collection("breakRecords")
         .where("userId", "==", currentUser.employeeNumber)
         .where("startTime", ">=", firebase.firestore.Timestamp.fromDate(today))
@@ -389,7 +432,6 @@
         let startStr = start ? formatTime(start) : "";
         let endStr = end ? formatTime(end) : "未終了";
 
-        // 休憩時間の計算
         let durationMs = 0;
         if (start && end) {
           durationMs = end - start;
@@ -411,14 +453,13 @@
         recordsTableBody.appendChild(tr);
       });
 
-      // 合計休憩時間表示
+      // 合計休憩時間
       totalBreakTimeSpan.textContent = formatDurationFromMs(totalMs);
     }
 
     // 編集機能 (簡易的に時間を上書きする例)
     window.editBreakRecord = async function(docId) {
       try {
-        // 現在のデータを取得
         const docRef = db.collection("breakRecords").doc(docId);
         const docSnap = await docRef.get();
         if (!docSnap.exists) {
@@ -429,34 +470,26 @@
         const currentStart = data.startTime?.toDate();
         const currentEnd = data.endTime?.toDate();
 
-        // 新しい開始時刻を入力
         let newStartInput = prompt(
           "新しい休憩開始時刻 (HH:MM:SS)を入力してください",
           currentStart ? formatTime(currentStart) : ""
         );
-        // キャンセル等のチェック
         if (newStartInput === null) return;
 
-        // 新しい終了時刻を入力
         let newEndInput = prompt(
           "新しい休憩終了時刻 (HH:MM:SS)を入力してください (未終了なら空でOK)",
           currentEnd ? formatTime(currentEnd) : ""
         );
         if (newEndInput === null) return;
 
-        // 当日の日付文字列
+        // 当日の年月日を取得
         const dayStr = currentStart
           ? currentStart.toLocaleDateString()
           : new Date().toLocaleDateString();
 
-        // 入力値をDateに変換
         let newStartDate = new Date(`${dayStr} ${newStartInput}`);
-        // 終了時刻が入力されていればDateに変換、空ならnullで更新
-        let newEndDate = newEndInput.trim()
-          ? new Date(`${dayStr} ${newEndInput}`)
-          : null;
+        let newEndDate = newEndInput.trim() ? new Date(`${dayStr} ${newEndInput}`) : null;
 
-        // Firestoreに更新
         await docRef.update({
           startTime: firebase.firestore.Timestamp.fromDate(newStartDate),
           endTime: newEndDate
