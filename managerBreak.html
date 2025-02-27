@@ -305,7 +305,7 @@
       const mgr = localStorage.getItem("currentManager");
       if (!mgr) {
         // 未ログインならログイン画面へ
-        window.location.href = "managerLogin.html";
+        window.location.href = "managerLogin_kyukei.html";
       } else {
         currentManager = JSON.parse(mgr);
         managerInfoSpan.textContent = "管理者ID: " + currentManager.managerId;
@@ -316,7 +316,7 @@
     // ログアウト
     logoutBtn.addEventListener("click", () => {
       localStorage.removeItem("currentManager");
-      window.location.href = "managerLogin.html";
+      window.location.href = "managerLogin_kyukei.html";
     });
 
     // 検索ボタン
