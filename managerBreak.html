@@ -3,13 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <title>管理者ダッシュボード - 休憩記録</title>
+  <link rel="stylesheet" href="style.css">
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-
-  <!-- スマホ対応のメタタグ -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
   <style>
     /* 管理者画面用スタイル（CodeBを参考） */
     .search-card {
@@ -46,7 +43,6 @@
     .search-row button {
       margin-top: 0;
     }
-
     table {
       width: 100%;
       border-collapse: collapse;
@@ -69,7 +65,6 @@
     tbody tr:nth-child(even) {
       background-color: #fafafa;
     }
-
     .paging-buttons {
       margin-top: 20px;
       display: flex;
@@ -81,7 +76,6 @@
       font-size: 16px;
       border-radius: 6px;
     }
-
     #managerSection > div:first-child {
       margin-bottom: 20px;
     }
@@ -92,7 +86,6 @@
     #downloadCSVBtn {
       margin-top: 8px;
     }
-
     /* スマホ用のメディアクエリ */
     @media (max-width: 480px) {
       .container {
@@ -112,7 +105,6 @@
         padding: 8px;
       }
     }
-
     /* PC版用スタイル（画面幅800px以上の場合） */
     @media (min-width: 800px) {
       .container {
@@ -184,7 +176,6 @@
           <button id="downloadCSVBtn">CSVダウンロード</button>
         </div>
       </div>
-
       <!-- 一覧テーブル -->
       <table id="recordsTable">
         <thead>
@@ -193,11 +184,11 @@
             <th>日付</th>
             <th>休憩開始時刻</th>
             <th>休憩終了時刻</th>
+            <th>休憩時間</th>
           </tr>
         </thead>
         <tbody id="recordsTableBody"></tbody>
       </table>
-
       <!-- ページングボタン -->
       <div class="paging-buttons">
         <button id="prevPageBtn" disabled>前へ</button>
@@ -224,9 +215,30 @@
       }
     }
 
+    // ヘルパー関数: 休憩時間（ミリ秒の差）を「〇時〇分〇秒」形式に整形
+    function formatDurationFromMs(ms) {
+      const totalSeconds = Math.floor(ms / 1000);
+      const h = Math.floor(totalSeconds / 3600);
+      const r = totalSeconds % 3600;
+      const m = Math.floor(r / 60);
+      const s = r % 60;
+      function padZero(num) {
+        return num.toString().padStart(2, '0');
+      }
+      let result = "";
+      if (h > 0) {
+        result = h + "時" + padZero(m) + "分" + padZero(s) + "秒";
+      } else if (m > 0) {
+        result = padZero(m) + "分" + padZero(s) + "秒";
+      } else {
+        result = padZero(s) + "秒";
+      }
+      return result;
+    }
+
     // Firebase の設定
     const firebaseConfig = {
-      apiKey: "AIzaSyDzYA...",
+      apiKey: "AIzaSyDzYAatr_PA8cfibICKwb3KZA6xyeNDHtjY",
       authDomain: "kintaidakoku-21454.firebaseapp.com",
       projectId: "kintaidakoku-21454",
       storageBucket: "kintaidakoku-21454.firebasestorage.app",
@@ -237,7 +249,7 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // DOM要素
+    // DOM要素取得
     const managerInfoSpan = document.getElementById("managerInfo");
     const logoutBtn = document.getElementById("logoutBtn");
     const searchEmployeeNumberInput = document.getElementById("searchEmployeeNumber");
@@ -251,7 +263,7 @@
     const nextPageBtn = document.getElementById("nextPageBtn");
 
     let currentManager = null;
-    const pageSize = 50; 
+    const pageSize = 50;
     let lastVisible = null;
     let firstVisible = null;
     let prevStack = [];
@@ -289,7 +301,7 @@
       loadRecords("prev", prevPoint);
     });
 
-    // クエリ生成（検索・ソート）※今回は breakRecords コレクション
+    // クエリ生成（検索・ソート）※休憩記録コレクション: breakRecords
     function buildQuery() {
       let empNo = searchEmployeeNumberInput.value.trim();
       let startDateVal = startDateInput.value;
@@ -331,7 +343,7 @@
       return { baseQuery };
     }
 
-    // レコード読み込み（50件ごと）→ ペアリングして表示
+    // レコード読み込み＆ペアリング：休憩開始と休憩終了を1セットとしてまとめる
     async function loadRecords(direction = "init", prevPoint = null) {
       recordsTableBody.innerHTML = "";
       const { baseQuery } = buildQuery();
@@ -365,7 +377,6 @@
         records.push(data);
       });
 
-      // breakStart / breakEnd を順次ペアリングして 1行にまとめる
       let pairs = pairBreakRecords(records);
       renderRecordsAsPairs(pairs);
 
@@ -373,11 +384,9 @@
       prevPageBtn.disabled = (prevStack.length === 0 && direction !== "next");
     }
 
-    // シーケンシャルに breakStart → breakEnd をペアにする
+    // シーケンシャルに休憩開始と休憩終了をペアリング
     function pairBreakRecords(records) {
       // timestamp 昇順になっている前提
-      // userId が違う場合もそのまま時系列順にペアリング
-      // ※もし社員ごとにペアリングしたい場合は別途 userId のチェックを行う
       let pairs = [];
       let startQueue = [];
       for (let r of records) {
@@ -386,10 +395,10 @@
         } else if (r.type === "breakEnd") {
           if (startQueue.length > 0) {
             let s = startQueue.shift();
-            pairs.push({ 
-              userId: s.userId, 
-              start: s, 
-              end: r 
+            pairs.push({
+              userId: s.userId,
+              start: s,
+              end: r
             });
           } else {
             pairs.push({
@@ -411,24 +420,29 @@
       return pairs;
     }
 
-    // テーブル表示: 1行に「社員番号」「日付」「休憩開始時刻」「休憩終了時刻」
+    // テーブル表示（ペアごとに「社員番号, 日付, 休憩開始時刻, 休憩終了時刻, 休憩時間」）
     function renderRecordsAsPairs(pairs) {
       recordsTableBody.innerHTML = "";
       pairs.forEach(p => {
-        // 日付は start があれば start の日付、なければ end の日付
+        // 日付は start があればそれを、なければ end の日付を使用
         let dateObj = p.start 
-            ? p.start.timestamp.toDate() 
-            : (p.end ? p.end.timestamp.toDate() : null);
+          ? p.start.timestamp.toDate() 
+          : (p.end ? p.end.timestamp.toDate() : null);
         let dateStr = dateObj ? dateObj.toLocaleDateString() : "-";
-        let breakStartStr = p.start ? formatTime(p.start.timestamp.toDate()) : "";
-        let breakEndStr = p.end ? formatTime(p.end.timestamp.toDate()) : "";
-
+        let breakStartStr = p.start ? formatTime(p.start.timestamp.toDate()) : "-";
+        let breakEndStr = p.end ? formatTime(p.end.timestamp.toDate()) : "-";
+        let durationStr = "-";
+        if (p.start && p.end) {
+          let ms = p.end.timestamp.toDate() - p.start.timestamp.toDate();
+          durationStr = formatDurationFromMs(ms);
+        }
         let row = document.createElement("tr");
         row.innerHTML = `
           <td>${p.userId}</td>
           <td>${dateStr}</td>
           <td>${breakStartStr}</td>
           <td>${breakEndStr}</td>
+          <td>${durationStr}</td>
         `;
         recordsTableBody.appendChild(row);
       });
@@ -463,15 +477,20 @@
 
     // CSV用文字列生成（ペアリング後）
     function buildCSVAsPairs(pairs) {
-      let csv = "社員番号,日付,休憩開始時刻,休憩終了時刻\n";
+      let csv = "社員番号,日付,休憩開始時刻,休憩終了時刻,休憩時間\n";
       pairs.forEach(p => {
         let dateObj = p.start 
-            ? p.start.timestamp.toDate() 
-            : (p.end ? p.end.timestamp.toDate() : null);
+          ? p.start.timestamp.toDate() 
+          : (p.end ? p.end.timestamp.toDate() : null);
         let dateStr = dateObj ? dateObj.toLocaleDateString() : "";
         let breakStartStr = p.start ? formatTime(p.start.timestamp.toDate()) : "";
         let breakEndStr = p.end ? formatTime(p.end.timestamp.toDate()) : "";
-        csv += `${p.userId},${dateStr},${breakStartStr},${breakEndStr}\n`;
+        let durationStr = "";
+        if (p.start && p.end) {
+          let ms = p.end.timestamp.toDate() - p.start.timestamp.toDate();
+          durationStr = formatDurationFromMs(ms);
+        }
+        csv += `${p.userId},${dateStr},${breakStartStr},${breakEndStr},${durationStr}\n`;
       });
       return csv;
     }
