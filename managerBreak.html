@@ -8,7 +8,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <style>
-    /* 管理者画面用スタイル（CodeB を参考） */
+    /* 管理者画面用スタイル（CodeBを参考） */
     .search-card {
       background-color: #fefefe;
       border: 1px solid #d2d2d7;
@@ -76,6 +76,7 @@
       font-size: 16px;
       border-radius: 6px;
     }
+    /* ヘッダー部分 */
     #managerSection > div:first-child {
       margin-bottom: 20px;
     }
@@ -83,10 +84,11 @@
       font-weight: 600;
       font-size: 16px;
     }
+    /* CSVダウンロードボタン */
     #downloadCSVBtn {
       margin-top: 8px;
     }
-    /* スマホ用：基本はスタイルA（必要なら調整） */
+    /* スマホ用のメディアクエリ */
     @media (max-width: 480px) {
       .container {
         max-width: 100%;
@@ -105,7 +107,7 @@
         padding: 8px;
       }
     }
-    /* PC版用スタイル */
+    /* PC版用スタイル（画面幅800px以上の場合） */
     @media (min-width: 800px) {
       .container {
         max-width: 1000px;
@@ -263,7 +265,7 @@
     const nextPageBtn = document.getElementById("nextPageBtn");
 
     let currentManager = null;
-    const pageSize = 50; 
+    const pageSize = 50;
     let lastVisible = null;
     let firstVisible = null;
     let prevStack = [];
@@ -308,7 +310,7 @@
       let endDateVal = endDateInput.value;
       let sortOption = sortSelect.value;
 
-      let baseQuery = db.collection("breakRecords");
+      let baseQuery = db.collection("breakRecords"); // 休憩記録用
 
       if (empNo) {
         baseQuery = baseQuery.where("userId", "==", empNo);
@@ -418,7 +420,7 @@
     // ページネーションとレコード読み込み
     async function loadRecords(direction = "init", prevPoint = null) {
       recordsTableBody.innerHTML = "";
-      let { baseQuery } = buildQuery();
+      const { baseQuery } = buildQuery();
       let query = baseQuery.limit(pageSize);
 
       if (direction === "next" && lastVisible) {
