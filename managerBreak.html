@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>管理者ダッシュボード - 休憩記録</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <style>
+    /* 管理者画面用スタイル（CodeB を参考） */
+    .search-card {
+      background-color: #fefefe;
+      border: 1px solid #d2d2d7;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    }
+    .search-card h3 {
+      font-size: 20px;
+      margin-bottom: 12px;
+    }
+    .search-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .search-row label {
+      min-width: 80px;
+      font-weight: 600;
+    }
+    .search-row input[type="text"],
+    .search-row input[type="date"],
+    .search-row select {
+      padding: 8px;
+      border: 1px solid #d2d2d7;
+      border-radius: 6px;
+      min-width: 150px;
+    }
+    .search-row button {
+      margin-top: 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    thead {
+      background-color: #f5f5f7;
+    }
+    th {
+      padding: 12px;
+      border-bottom: 1px solid #d2d2d7;
+      text-align: center;
+      font-weight: 600;
+    }
+    td {
+      padding: 12px;
+      border-bottom: 1px solid #d2d2d7;
+      text-align: center;
+    }
+    tbody tr:nth-child(even) {
+      background-color: #fafafa;
+    }
+    .paging-buttons {
+      margin-top: 20px;
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+    }
+    .paging-buttons button {
+      padding: 10px 16px;
+      font-size: 16px;
+      border-radius: 6px;
+    }
+    #managerSection > div:first-child {
+      margin-bottom: 20px;
+    }
+    #managerInfo {
+      font-weight: 600;
+      font-size: 16px;
+    }
+    #downloadCSVBtn {
+      margin-top: 8px;
+    }
+    /* スマホ用：基本はスタイルA（必要なら調整） */
+    @media (max-width: 480px) {
+      .container {
+        max-width: 100%;
+        padding: 8px;
+      }
+      .search-card h3 {
+        font-size: 18px;
+      }
+      .search-row label,
+      .search-row input,
+      .search-row select {
+        font-size: 14px;
+      }
+      th, td {
+        font-size: 12px;
+        padding: 8px;
+      }
+    }
+    /* PC版用スタイル */
+    @media (min-width: 800px) {
+      .container {
+        max-width: 1000px;
+        padding: 24px;
+      }
+      header h1 {
+        font-size: 34px;
+      }
+      #managerSection > div:first-child {
+        font-size: 22px;
+      }
+      .search-card h3 {
+        font-size: 26px;
+      }
+      .search-row label,
+      .search-row input,
+      .search-row select {
+        font-size: 18px;
+      }
+      th, td {
+        font-size: 22px;
+        padding: 16px;
+      }
+      #managerInfo {
+        font-size: 24px;
+      }
+      .paging-buttons button {
+        font-size: 20px;
+        padding: 12px 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>管理者ダッシュボード - 休憩記録</h1>
+    </header>
+    <section id="managerSection">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span id="managerInfo"></span>
+        <button id="logoutBtn">ログアウト</button>
+      </div>
+      <!-- 検索・フィルタエリア -->
+      <div class="search-card">
+        <h3>検索 / フィルタ</h3>
+        <div class="search-row">
+          <label for="searchEmployeeNumber">社員番号</label>
+          <input type="text" id="searchEmployeeNumber" placeholder="例: 12345">
+        </div>
+        <div class="search-row">
+          <label for="startDate">日付範囲</label>
+          <input type="date" id="startDate">
+          <span>～</span>
+          <input type="date" id="endDate">
+        </div>
+        <div class="search-row">
+          <label for="sortSelect">並べ替え</label>
+          <select id="sortSelect">
+            <option value="dateAsc">日付 昇順</option>
+            <option value="dateDesc">日付 降順</option>
+            <option value="userIdAsc">社員番号 昇順</option>
+            <option value="userIdDesc">社員番号 降順</option>
+          </select>
+        </div>
+        <div class="search-row">
+          <button id="searchBtn">検索</button>
+          <button id="downloadCSVBtn">CSVダウンロード</button>
+        </div>
+      </div>
+      <!-- 一覧テーブル -->
+      <table id="recordsTable">
+        <thead>
+          <tr>
+            <th>社員番号</th>
+            <th>日付</th>
+            <th>休憩開始</th>
+            <th>休憩終了</th>
+            <th>休憩時間</th>
+          </tr>
+        </thead>
+        <tbody id="recordsTableBody"></tbody>
+      </table>
+      <!-- ページングボタン -->
+      <div class="paging-buttons">
+        <button id="prevPageBtn" disabled>前へ</button>
+        <button id="nextPageBtn" disabled>次へ</button>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // ヘルパー関数: 日付オブジェクトを「〇時〇分〇秒」形式に整形
+    function formatTime(date) {
+      let h = date.getHours();
+      let m = date.getMinutes();
+      let s = date.getSeconds();
+      function padZero(num) {
+        return num.toString().padStart(2, '0');
+      }
+      if (h > 0) {
+        return h + "時" + padZero(m) + "分" + padZero(s) + "秒";
+      } else if (m > 0) {
+        return padZero(m) + "分" + padZero(s) + "秒";
+      } else {
+        return padZero(s) + "秒";
+      }
+    }
+
+    // ヘルパー関数: ミリ秒を「〇時〇分〇秒」形式に整形（休憩時間）
+    function formatDurationFromMs(ms) {
+      const totalSeconds = Math.floor(ms / 1000);
+      const h = Math.floor(totalSeconds / 3600);
+      const r = totalSeconds % 3600;
+      const m = Math.floor(r / 60);
+      const s = r % 60;
+      function padZero(num) {
+        return num.toString().padStart(2, '0');
+      }
+      let result = "";
+      if (h > 0) {
+        result = h + "時" + padZero(m) + "分" + padZero(s) + "秒";
+      } else if (m > 0) {
+        result = padZero(m) + "分" + padZero(s) + "秒";
+      } else {
+        result = padZero(s) + "秒";
+      }
+      return result;
+    }
+
+    // Firebase の設定
+    const firebaseConfig = {
+      apiKey: "AIzaSyDzYAatr_PA8cfibICKwb3KZA6xyeNDHtjY",
+      authDomain: "kintaidakoku-21454.firebaseapp.com",
+      projectId: "kintaidakoku-21454",
+      storageBucket: "kintaidakoku-21454.firebasestorage.app",
+      messagingSenderId: "185561108336",
+      appId: "1:185561108336:web:a5eab6de7a713a946a49b5",
+      measurementId: "G-TZKSMNH7HZ"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // DOM要素取得
+    const managerInfoSpan = document.getElementById("managerInfo");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const searchEmployeeNumberInput = document.getElementById("searchEmployeeNumber");
+    const startDateInput = document.getElementById("startDate");
+    const endDateInput = document.getElementById("endDate");
+    const sortSelect = document.getElementById("sortSelect");
+    const searchBtn = document.getElementById("searchBtn");
+    const downloadCSVBtn = document.getElementById("downloadCSVBtn");
+    const recordsTableBody = document.getElementById("recordsTableBody");
+    const prevPageBtn = document.getElementById("prevPageBtn");
+    const nextPageBtn = document.getElementById("nextPageBtn");
+
+    let currentManager = null;
+    const pageSize = 50; 
+    let lastVisible = null;
+    let firstVisible = null;
+    let prevStack = [];
+
+    window.onload = () => {
+      const mgr = localStorage.getItem("currentManager");
+      if (!mgr) {
+        window.location.href = "managerLogin.html";
+      } else {
+        currentManager = JSON.parse(mgr);
+        managerInfoSpan.textContent = "管理者ID: " + currentManager.managerId;
+        loadRecords();
+      }
+    };
+
+    logoutBtn.addEventListener("click", () => {
+      localStorage.removeItem("currentManager");
+      window.location.href = "managerLogin.html";
+    });
+
+    searchBtn.addEventListener("click", () => {
+      lastVisible = null;
+      firstVisible = null;
+      prevStack = [];
+      loadRecords();
+    });
+
+    nextPageBtn.addEventListener("click", () => {
+      prevStack.push(firstVisible);
+      loadRecords("next");
+    });
+
+    prevPageBtn.addEventListener("click", () => {
+      const prevPoint = prevStack.pop();
+      loadRecords("prev", prevPoint);
+    });
+
+    // クエリ生成（検索・ソート）
+    function buildQuery() {
+      let empNo = searchEmployeeNumberInput.value.trim();
+      let startDateVal = startDateInput.value;
+      let endDateVal = endDateInput.value;
+      let sortOption = sortSelect.value;
+
+      let baseQuery = db.collection("breakRecords");
+
+      if (empNo) {
+        baseQuery = baseQuery.where("userId", "==", empNo);
+      }
+      if (startDateVal) {
+        const sDate = new Date(startDateVal);
+        sDate.setHours(0,0,0,0);
+        baseQuery = baseQuery.where("timestamp", ">=", firebase.firestore.Timestamp.fromDate(sDate));
+      }
+      if (endDateVal) {
+        const eDate = new Date(endDateVal);
+        eDate.setHours(24,0,0,0);
+        baseQuery = baseQuery.where("timestamp", "<", firebase.firestore.Timestamp.fromDate(eDate));
+      }
+
+      switch (sortOption) {
+        case "userIdAsc":
+          baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
+          break;
+        case "userIdDesc":
+          baseQuery = baseQuery.orderBy("timestamp", "desc").orderBy("userId", "desc");
+          break;
+        case "dateAsc":
+          baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
+          break;
+        case "dateDesc":
+          baseQuery = baseQuery.orderBy("timestamp", "desc").orderBy("userId", "desc");
+          break;
+        default:
+          baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
+      }
+      return { baseQuery };
+    }
+
+    // 同一社員・同一日の休憩記録をグループ化し、各グループで最も早い休憩開始、最も遅い休憩終了、合計休憩時間を算出
+    function groupBreakRecordsAdmin(records) {
+      let groups = {};
+      records.forEach(r => {
+        let userId = r.userId;
+        let dateStr = r.timestamp.toDate().toLocaleDateString();
+        let key = userId + "_" + dateStr;
+        if (!groups[key]) {
+          groups[key] = {
+            userId: userId,
+            dateStr: dateStr,
+            breakStartTimes: [],
+            breakEndTimes: [],
+            totalDurationMs: 0
+          };
+        }
+        if (r.type === "breakStart") {
+          groups[key].breakStartTimes.push(r.timestamp.toDate());
+        } else if (r.type === "breakEnd") {
+          groups[key].breakEndTimes.push(r.timestamp.toDate());
+        }
+      });
+      let result = [];
+      Object.keys(groups).forEach(key => {
+        let group = groups[key];
+        if (group.breakStartTimes.length > 0 && group.breakEndTimes.length > 0) {
+          let earliestStart = new Date(Math.min(...group.breakStartTimes));
+          let latestEnd = new Date(Math.max(...group.breakEndTimes));
+          group.breakStart = earliestStart;
+          group.breakEnd = latestEnd;
+          group.totalDurationMs = latestEnd - earliestStart;
+        } else {
+          group.breakStart = group.breakStartTimes.length > 0 ? new Date(Math.min(...group.breakStartTimes)) : null;
+          group.breakEnd = group.breakEndTimes.length > 0 ? new Date(Math.max(...group.breakEndTimes)) : null;
+          group.totalDurationMs = group.breakStart && group.breakEnd ? group.breakEnd - group.breakStart : 0;
+        }
+        result.push(group);
+      });
+      return result;
+    }
+
+    // テーブル表示（管理者用：休憩記録）
+    function renderGroupedRecordsAdmin(grouped) {
+      recordsTableBody.innerHTML = "";
+      grouped.forEach(obj => {
+        let breakStartStr = obj.breakStart ? formatTime(obj.breakStart) : "-";
+        let breakEndStr = obj.breakEnd ? formatTime(obj.breakEnd) : "-";
+        let durationStr = obj.totalDurationMs ? formatDurationFromMs(obj.totalDurationMs) : "-";
+        let row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${obj.userId}</td>
+          <td>${obj.dateStr}</td>
+          <td>${breakStartStr}</td>
+          <td>${breakEndStr}</td>
+          <td>${durationStr}</td>
+        `;
+        recordsTableBody.appendChild(row);
+      });
+    }
+
+    // CSV用文字列生成（管理者用：休憩記録）
+    function buildCSV(grouped) {
+      let csv = "社員番号,日付,休憩開始,休憩終了,休憩時間\n";
+      grouped.forEach(obj => {
+        let breakStartStr = obj.breakStart ? formatTime(obj.breakStart) : "";
+        let breakEndStr = obj.breakEnd ? formatTime(obj.breakEnd) : "";
+        let durationStr = obj.totalDurationMs ? formatDurationFromMs(obj.totalDurationMs) : "";
+        csv += `${obj.userId},${obj.dateStr},${breakStartStr},${breakEndStr},${durationStr}\n`;
+      });
+      return csv;
+    }
+
+    // ページネーションとレコード読み込み
+    async function loadRecords(direction = "init", prevPoint = null) {
+      recordsTableBody.innerHTML = "";
+      let { baseQuery } = buildQuery();
+      let query = baseQuery.limit(pageSize);
+
+      if (direction === "next" && lastVisible) {
+        query = query.startAfter(lastVisible);
+      } else if (direction === "prev" && prevPoint) {
+        query = query.endBefore(prevPoint).limitToLast(pageSize);
+      }
+
+      const snapshot = await query.get();
+      if (snapshot.empty) {
+        if (direction === "next") {
+          alert("これ以上のデータはありません。");
+        } else if (direction === "prev") {
+          alert("前のページはありません。");
+        }
+        return;
+      }
+
+      let firstDoc = snapshot.docs[0];
+      let lastDoc = snapshot.docs[snapshot.docs.length - 1];
+      firstVisible = firstDoc;
+      lastVisible = lastDoc;
+
+      let records = [];
+      snapshot.forEach(doc => {
+        let data = doc.data();
+        data.id = doc.id;
+        records.push(data);
+      });
+
+      let grouped = groupBreakRecordsAdmin(records);
+      renderGroupedRecordsAdmin(grouped);
+
+      nextPageBtn.disabled = (snapshot.size < pageSize);
+      prevPageBtn.disabled = (prevStack.length === 0 && direction !== "next");
+    }
+
+    nextPageBtn.addEventListener("click", () => {
+      prevStack.push(firstVisible);
+      loadRecords("next");
+    });
+
+    prevPageBtn.addEventListener("click", () => {
+      const prevPoint = prevStack.pop();
+      loadRecords("prev", prevPoint);
+    });
+
+    // CSVダウンロード
+    downloadCSVBtn.addEventListener("click", async () => {
+      let { baseQuery } = buildQuery();
+      const snapshot = await baseQuery.get();
+      if (snapshot.empty) {
+        alert("ダウンロード対象のデータがありません。");
+        return;
+      }
+      let records = [];
+      snapshot.forEach(doc => {
+        let data = doc.data();
+        data.id = doc.id;
+        records.push(data);
+      });
+      let grouped = groupBreakRecordsAdmin(records);
+      let csvContent = buildCSV(grouped);
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", "break_records.csv");
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+  </script>
+</body>
+</html>
