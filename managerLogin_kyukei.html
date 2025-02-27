@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>管理者ログイン（休憩時間管理）</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Firebase SDK: Firestore と初期化用 -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>管理者ログイン（休憩時間管理）</h1>
+    </header>
+    <section id="login">
+      <h2>ログイン</h2>
+      <input type="text" id="managerId" placeholder="管理者ID">
+      <input type="password" id="managerPassword" placeholder="パスワード">
+      <button id="loginBtn">ログイン</button>
+      <div id="loginError" class="error"></div>
+    </section>
+  </div>
+
+  <script>
+    // Firebase の設定（各自のプロジェクト情報に置き換えてください）
+const firebaseConfig = {
+  apiKey: "AIzaSyDzYAtr_PA8cfibICKwb3KZA6xyeNDHtjY",
+  authDomain: "kintaidakoku-21454.firebaseapp.com",
+  projectId: "kintaidakoku-21454",
+  storageBucket: "kintaidakoku-21454.firebasestorage.app",
+  messagingSenderId: "185561108336",
+  appId: "1:185561108336:web:a5eab6de7a713a946a49b5",
+  measurementId: "G-TZKSMNH7HZ"
+};
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const loginBtn = document.getElementById("loginBtn");
+    const managerIdInput = document.getElementById("managerId");
+    const managerPasswordInput = document.getElementById("managerPassword");
+    const loginErrorDiv = document.getElementById("loginError");
+
+    // ログイン処理
+    loginBtn.addEventListener("click", () => {
+      const mgrId = managerIdInput.value.trim();
+      const mgrPwd = managerPasswordInput.value;
+      if (!mgrId || !mgrPwd) {
+        loginErrorDiv.textContent = "管理者IDとパスワードを入力してください。";
+        return;
+      }
+      // "managers" コレクションで管理者情報を管理すると想定
+      db.collection("managers").doc(mgrId).get()
+        .then(doc => {
+          if (doc.exists) {
+            const mgrData = doc.data();
+            if (mgrData.password === mgrPwd) {
+              // ログイン成功 → localStorage に保存 → managerBreak.html へ
+              localStorage.setItem("currentManager", JSON.stringify({ managerId: mgrId }));
+              window.location.href = "managerBreak.html";
+            } else {
+              loginErrorDiv.textContent = "パスワードが間違っています。";
+            }
+          } else {
+            loginErrorDiv.textContent = "管理者が存在しません。";
+          }
+        })
+        .catch(error => {
+          console.error("管理者ログインエラー: ", error);
+          loginErrorDiv.textContent = "ログイン中にエラーが発生しました。";
+        });
+    });
+
+    // 既にログイン済みの場合は managerBreak.html へ
+    window.onload = () => {
+      const mgr = localStorage.getItem("currentManager");
+      if (mgr) {
+        window.location.href = "managerBreak.html";
+      }
+    };
+  </script>
+</body>
+</html>
