@@ -3,10 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <title>管理者ダッシュボード - 休憩記録</title>
-  <link rel="stylesheet" href="style.css">
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <!-- スマホ対応のメタタグ -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
   <style>
     /* 管理者画面用スタイル（CodeBを参考） */
     .search-card {
@@ -189,8 +192,8 @@
           <tr>
             <th>社員番号</th>
             <th>日付</th>
-            <th>時刻</th>
-            <th>種別</th>
+            <th>休憩開始時刻</th>
+            <th>休憩終了時刻</th>
           </tr>
         </thead>
         <tbody id="recordsTableBody"></tbody>
@@ -235,7 +238,7 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // DOM要素取得
+    // DOM要素
     const managerInfoSpan = document.getElementById("managerInfo");
     const logoutBtn = document.getElementById("logoutBtn");
     const searchEmployeeNumberInput = document.getElementById("searchEmployeeNumber");
@@ -287,7 +290,7 @@
       loadRecords("prev", prevPoint);
     });
 
-    // クエリ生成（検索・ソート）※休憩記録コレクション: breakRecords
+    // クエリ生成（検索・ソート）
     function buildQuery() {
       let empNo = searchEmployeeNumberInput.value.trim();
       let startDateVal = startDateInput.value;
@@ -310,7 +313,6 @@
         baseQuery = baseQuery.where("timestamp", "<", firebase.firestore.Timestamp.fromDate(eDate));
       }
 
-      // 並べ替え
       switch (sortOption) {
         case "userIdAsc":
           baseQuery = baseQuery.orderBy("timestamp", "asc").orderBy("userId", "asc");
@@ -357,20 +359,22 @@
       firstVisible = firstDoc;
       lastVisible = lastDoc;
 
-      // 取得したドキュメントを表示
       let records = [];
       snapshot.forEach(doc => {
         let data = doc.data();
         data.id = doc.id;
         records.push(data);
       });
+
+      // そのまま表示するが、カラムは「社員番号, 日付, 休憩開始時刻, 休憩終了時刻」
+      // breakStart → 休憩開始時刻にセット、 breakEnd → 休憩終了時刻にセット
       renderRecordsAsIs(records);
 
       nextPageBtn.disabled = (snapshot.size < pageSize);
       prevPageBtn.disabled = (prevStack.length === 0 && direction !== "next");
     }
 
-    // レコードをそのまま表示する（休憩開始/終了のペアリングや時間差計算はしない）
+    // そのまま出力し、カラムを「休憩開始時刻」or「休憩終了時刻」に振り分け
     function renderRecordsAsIs(records) {
       recordsTableBody.innerHTML = "";
       records.forEach(r => {
@@ -378,25 +382,21 @@
         let dateObj = r.timestamp.toDate();
         let dateStr = dateObj.toLocaleDateString();
         let timeStr = formatTime(dateObj);
-        let typeStr = (r.type === "breakStart") ? "休憩開始" : (r.type === "breakEnd" ? "休憩終了" : "-");
-        // 休憩時間の列は使わない場合は空白 or "-"
-        // ただしユーザーの要望が「休憩時間」列を表示し、差分を出さない場合は "-"固定
-        // 今回はそのまま出力しないなら "-"固定
-        let durationStr = "-";
+        let breakStartStr = (r.type === "breakStart") ? timeStr : "";
+        let breakEndStr = (r.type === "breakEnd") ? timeStr : "";
 
         let row = document.createElement("tr");
         row.innerHTML = `
           <td>${userId}</td>
           <td>${dateStr}</td>
-          <td>${timeStr}</td>
-          <td>${typeStr}</td>
-          <td>${durationStr}</td>
+          <td>${breakStartStr}</td>
+          <td>${breakEndStr}</td>
         `;
         recordsTableBody.appendChild(row);
       });
     }
 
-    // CSVダウンロード
+    // CSVダウンロード（同様にカラムを「社員番号, 日付, 休憩開始時刻, 休憩終了時刻」）
     downloadCSVBtn.addEventListener("click", async () => {
       let { baseQuery } = buildQuery();
       const snapshot = await baseQuery.get();
@@ -422,20 +422,22 @@
       document.body.removeChild(link);
     });
 
-    // CSV用文字列生成（そのまま出力）
     function buildCSVAsIs(records) {
-      let csv = "社員番号,日付,時刻,種別,休憩時間\n";
+      let csv = "社員番号,日付,休憩開始時刻,休憩終了時刻\n";
       records.forEach(r => {
         let userId = r.userId || "-";
         let dateObj = r.timestamp.toDate();
         let dateStr = dateObj.toLocaleDateString();
         let timeStr = formatTime(dateObj);
-        let typeStr = (r.type === "breakStart") ? "休憩開始" : (r.type === "breakEnd" ? "休憩終了" : "");
-        let durationStr = "-";
-        csv += `${userId},${dateStr},${timeStr},${typeStr},${durationStr}\n`;
+
+        let breakStartStr = (r.type === "breakStart") ? timeStr : "";
+        let breakEndStr = (r.type === "breakEnd") ? timeStr : "";
+
+        csv += `${userId},${dateStr},${breakStartStr},${breakEndStr}\n`;
       });
       return csv;
     }
+    
   </script>
 </body>
 </html>
