@@ -26,6 +26,7 @@
       margin: 0;
       padding: 0;
     }
+
     /* コンテナ: スマホでは幅100%に */
     .container {
       width: 100%;
@@ -33,6 +34,7 @@
       margin: 0 auto;
       padding: 16px;
     }
+
     /* ヘッダー */
     header {
       text-align: center;
@@ -42,6 +44,7 @@
       font-size: 24px;
       font-weight: 600;
     }
+
     /* 上部の情報バー */
     #breakSection > div:first-child {
       display: flex;
@@ -49,6 +52,7 @@
       align-items: center;
       margin-bottom: 16px;
     }
+
     /* ボタン類 */
     .button-group {
       text-align: center;
@@ -67,18 +71,21 @@
     .button-group button:hover {
       background-color: #005bb5;
     }
+
     /* ステータスメッセージ */
     #statusMessage {
       text-align: center;
       color: green;
       margin-top: 10px;
     }
+
     /* テーブルを横スクロール可能にするコンテナ */
     .table-container {
       width: 100%;
       overflow-x: auto;
       margin-top: 16px;
     }
+
     /* テーブル */
     #breakRecordsTable {
       border-collapse: collapse;
@@ -94,15 +101,17 @@
     #breakRecordsTable th {
       background-color: #f5f5f7;
     }
+
     /* 合計表示 */
     #totalBreakTime {
       font-weight: bold;
       margin-left: 4px;
     }
-    /* カスタムモーダル（編集用） */
+
+    /* カスタムモーダル（OKボタンのみ） */
     .modal-overlay {
       position: fixed;
-      top: 0; 
+      top: 0;
       left: 0;
       width: 100%;
       height: 100%;
@@ -129,7 +138,8 @@
       justify-content: center;
       gap: 16px;
     }
-    /* 新規追加行のハイライト用アニメーション */
+
+    /* 新規追加・更新行のハイライト用アニメーション */
     @keyframes highlight-fade {
       0%   { background-color: #ffff9c; } /* 薄い黄色 */
       100% { background-color: transparent; }
@@ -137,7 +147,7 @@
     .highlight-row {
       animation: highlight-fade 3s forwards;
     }
-    
+
     /* スマホ用のメディアクエリ */
     @media (max-width: 480px) {
       .container {
@@ -156,6 +166,7 @@
         padding: 8px;
       }
     }
+
     /* PC版用スタイル（画面幅800px以上の場合） */
     @media (min-width: 800px) {
       .container {
@@ -237,7 +248,7 @@
     </section>
   </div>
 
-  <!-- 編集用カスタムモーダル (OKのみ) -->
+  <!-- 編集用カスタムモーダル (OKボタンのみ) -->
   <div id="modalOverlay" class="modal-overlay">
     <div class="modal-content">
       <p id="modalMessage">ここにメッセージが入ります</p>
@@ -303,7 +314,8 @@
 
     // モーダル表示/非表示用の共通関数
     function showModal(message, onOk) {
-      modalMessage.innerHTML = message; // <br> などHTMLタグを使う場合はinnerHTML
+      // <br>などのHTMLを使う場合はinnerHTMLを使用
+      modalMessage.innerHTML = message;
       modalOverlay.classList.add("active");
 
       // OKボタン押下時
@@ -348,7 +360,7 @@
           .get();
 
         if (!qSnap.empty) {
-          // 休憩中にも関わらず再度休憩開始しようとした → モーダル表示
+          // 休憩中にも関わらず再度休憩開始 → モーダル表示
           showModal(
             "すでに休憩中です。<br>連続で開始ボタンを押すことはできません。"
           );
@@ -365,7 +377,7 @@
         });
 
         showStatus("休憩開始を記録しました。");
-        // 新しく追加されたドキュメントIDを引数に渡してロード
+        // 新しく追加されたドキュメントIDを引数に渡してロード → ハイライト
         loadBreakRecords(docRef.id);
 
       } catch (err) {
@@ -386,7 +398,7 @@
           .get();
 
         if (qSnap.empty) {
-          // 休憩中でないのに休憩終了を押した → モーダル表示
+          // 休憩中でないのに終了ボタン → モーダル表示
           showModal(
             "現在休憩中ではありません。<br>連続で終了ボタンを押すことはできません。"
           );
@@ -398,8 +410,10 @@
         await docRef.update({
           endTime: firebase.firestore.Timestamp.fromDate(new Date())
         });
+
         showStatus("休憩終了を記録しました。");
-        loadBreakRecords();
+        // 更新したドキュメントIDを引数に渡してロード → ハイライト
+        loadBreakRecords(docRef.id);
 
       } catch (err) {
         console.error("休憩終了エラー:", err);
@@ -409,7 +423,7 @@
 
     /**
      * 当日分の休憩記録を読み込み・表示
-     * @param {string} [highlightId] - 新規追加行をハイライトさせるドキュメントID(任意)
+     * @param {string} [highlightId] - 新規追加/更新したドキュメントID(任意)
      */
     async function loadBreakRecords(highlightId) {
       recordsTableBody.innerHTML = "";
@@ -447,7 +461,7 @@
         // テーブルに行を追加
         const tr = document.createElement("tr");
 
-        // 新しく追加された docId と一致すれば、ハイライトクラスを付与
+        // highlightId と一致するドキュメントならハイライト表示
         if (highlightId && docId === highlightId) {
           tr.classList.add("highlight-row");
         }
