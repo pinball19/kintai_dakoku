@@ -228,13 +228,12 @@
     </section>
   </div>
 
-  <!-- 編集用カスタムモーダル -->
+  <!-- 編集用カスタムモーダル (OKボタンのみ) -->
   <div id="modalOverlay" class="modal-overlay">
     <div class="modal-content">
       <p id="modalMessage">ここにメッセージが入ります</p>
       <div class="modal-buttons">
         <button id="modalOkBtn">OK</button>
-        <button id="modalCancelBtn">キャンセル</button>
       </div>
     </div>
   </div>
@@ -288,26 +287,21 @@
     const totalBreakTimeSpan = document.getElementById("totalBreakTime");
     const statusMessage = document.getElementById("statusMessage");
 
-    // モーダル要素
+    // モーダル要素 (OKのみ)
     const modalOverlay = document.getElementById("modalOverlay");
     const modalMessage = document.getElementById("modalMessage");
     const modalOkBtn = document.getElementById("modalOkBtn");
-    const modalCancelBtn = document.getElementById("modalCancelBtn");
 
     // モーダル表示/非表示用の共通関数
-    function showModal(message, onOk, onCancel) {
-      modalMessage.textContent = message;
+    function showModal(message, onOk) {
+      // 改行を反映したいので innerHTML を使う (必要に応じて <br> を埋め込む)
+      modalMessage.innerHTML = message;
       modalOverlay.classList.add("active");
 
       // OKボタン押下時
       modalOkBtn.onclick = () => {
         modalOverlay.classList.remove("active");
         if (onOk) onOk();
-      };
-      // キャンセルボタン押下時
-      modalCancelBtn.onclick = () => {
-        modalOverlay.classList.remove("active");
-        if (onCancel) onCancel();
       };
     }
 
@@ -348,9 +342,7 @@
         if (!qSnap.empty) {
           // 休憩中にも関わらず再度休憩開始しようとした → モーダル表示
           showModal(
-            "すでに休憩中です。連続で開始ボタンを押すことはできません。",
-            () => { /* OK押下時の追加処理(必要なら) */ },
-            () => { /* キャンセル押下時の追加処理(必要なら) */ }
+            "すでに休憩中です。<br>連続で開始ボタンを押すことはできません。"
           );
           return;
         }
@@ -383,10 +375,9 @@
           .get();
 
         if (qSnap.empty) {
-          // 休憩中でないのに休憩終了を押した → モーダル表示
+          // 休憩中でないのに休憩終了を押した → モーダル表示 (改行を <br> で)
           showModal(
-            "現在休憩中ではありません。連続で終了ボタンを押すことはできません。",
-            () => { /* OK押下時の追加処理(必要なら) */ }
+            "現在休憩中ではありません。<br>連続で終了ボタンを押すことはできません。"
           );
           return;
         }
@@ -482,7 +473,6 @@
         );
         if (newEndInput === null) return;
 
-        // 当日の年月日を取得
         const dayStr = currentStart
           ? currentStart.toLocaleDateString()
           : new Date().toLocaleDateString();
