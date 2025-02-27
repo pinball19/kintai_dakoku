@@ -157,7 +157,6 @@
         <span id="managerInfo"></span>
         <button id="logoutBtn">ログアウト</button>
       </div>
-
       <!-- 検索・フィルタエリア -->
       <div class="search-card">
         <h3>検索 / フィルタ</h3>
@@ -290,7 +289,7 @@
       loadRecords("prev", prevPoint);
     });
 
-    // クエリ生成（検索・ソート）
+    // クエリ生成（検索・ソート）※今回は breakRecords コレクション
     function buildQuery() {
       let empNo = searchEmployeeNumberInput.value.trim();
       let startDateVal = startDateInput.value;
@@ -332,7 +331,7 @@
       return { baseQuery };
     }
 
-    // レコード読み込み＆表示
+    // レコード読み込み（50件ごと）→ ペアリングして表示
     async function loadRecords(direction = "init", prevPoint = null) {
       recordsTableBody.innerHTML = "";
       const { baseQuery } = buildQuery();
@@ -366,28 +365,67 @@
         records.push(data);
       });
 
-      // そのまま表示するが、カラムは「社員番号, 日付, 休憩開始時刻, 休憩終了時刻」
-      // breakStart → 休憩開始時刻にセット、 breakEnd → 休憩終了時刻にセット
-      renderRecordsAsIs(records);
+      // breakStart / breakEnd を順次ペアリングして 1行にまとめる
+      let pairs = pairBreakRecords(records);
+      renderRecordsAsPairs(pairs);
 
       nextPageBtn.disabled = (snapshot.size < pageSize);
       prevPageBtn.disabled = (prevStack.length === 0 && direction !== "next");
     }
 
-    // そのまま出力し、カラムを「休憩開始時刻」or「休憩終了時刻」に振り分け
-    function renderRecordsAsIs(records) {
+    // シーケンシャルに breakStart → breakEnd をペアにする
+    function pairBreakRecords(records) {
+      // timestamp 昇順になっている前提
+      // userId が違う場合もそのまま時系列順にペアリング
+      // ※もし社員ごとにペアリングしたい場合は別途 userId のチェックを行う
+      let pairs = [];
+      let startQueue = [];
+      for (let r of records) {
+        if (r.type === "breakStart") {
+          startQueue.push(r);
+        } else if (r.type === "breakEnd") {
+          if (startQueue.length > 0) {
+            let s = startQueue.shift();
+            pairs.push({ 
+              userId: s.userId, 
+              start: s, 
+              end: r 
+            });
+          } else {
+            pairs.push({
+              userId: r.userId,
+              start: null,
+              end: r
+            });
+          }
+        }
+      }
+      while (startQueue.length > 0) {
+        let s = startQueue.shift();
+        pairs.push({
+          userId: s.userId,
+          start: s,
+          end: null
+        });
+      }
+      return pairs;
+    }
+
+    // テーブル表示: 1行に「社員番号」「日付」「休憩開始時刻」「休憩終了時刻」
+    function renderRecordsAsPairs(pairs) {
       recordsTableBody.innerHTML = "";
-      records.forEach(r => {
-        let userId = r.userId || "-";
-        let dateObj = r.timestamp.toDate();
-        let dateStr = dateObj.toLocaleDateString();
-        let timeStr = formatTime(dateObj);
-        let breakStartStr = (r.type === "breakStart") ? timeStr : "";
-        let breakEndStr = (r.type === "breakEnd") ? timeStr : "";
+      pairs.forEach(p => {
+        // 日付は start があれば start の日付、なければ end の日付
+        let dateObj = p.start 
+            ? p.start.timestamp.toDate() 
+            : (p.end ? p.end.timestamp.toDate() : null);
+        let dateStr = dateObj ? dateObj.toLocaleDateString() : "-";
+        let breakStartStr = p.start ? formatTime(p.start.timestamp.toDate()) : "";
+        let breakEndStr = p.end ? formatTime(p.end.timestamp.toDate()) : "";
 
         let row = document.createElement("tr");
         row.innerHTML = `
-          <td>${userId}</td>
+          <td>${p.userId}</td>
           <td>${dateStr}</td>
           <td>${breakStartStr}</td>
           <td>${breakEndStr}</td>
@@ -396,7 +434,7 @@
       });
     }
 
-    // CSVダウンロード（同様にカラムを「社員番号, 日付, 休憩開始時刻, 休憩終了時刻」）
+    // CSVダウンロード
     downloadCSVBtn.addEventListener("click", async () => {
       let { baseQuery } = buildQuery();
       const snapshot = await baseQuery.get();
@@ -410,7 +448,8 @@
         data.id = doc.id;
         records.push(data);
       });
-      let csvContent = buildCSVAsIs(records);
+      let pairs = pairBreakRecords(records);
+      let csvContent = buildCSVAsPairs(pairs);
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -422,22 +461,20 @@
       document.body.removeChild(link);
     });
 
-    function buildCSVAsIs(records) {
+    // CSV用文字列生成（ペアリング後）
+    function buildCSVAsPairs(pairs) {
       let csv = "社員番号,日付,休憩開始時刻,休憩終了時刻\n";
-      records.forEach(r => {
-        let userId = r.userId || "-";
-        let dateObj = r.timestamp.toDate();
-        let dateStr = dateObj.toLocaleDateString();
-        let timeStr = formatTime(dateObj);
-
-        let breakStartStr = (r.type === "breakStart") ? timeStr : "";
-        let breakEndStr = (r.type === "breakEnd") ? timeStr : "";
-
-        csv += `${userId},${dateStr},${breakStartStr},${breakEndStr}\n`;
+      pairs.forEach(p => {
+        let dateObj = p.start 
+            ? p.start.timestamp.toDate() 
+            : (p.end ? p.end.timestamp.toDate() : null);
+        let dateStr = dateObj ? dateObj.toLocaleDateString() : "";
+        let breakStartStr = p.start ? formatTime(p.start.timestamp.toDate()) : "";
+        let breakEndStr = p.end ? formatTime(p.end.timestamp.toDate()) : "";
+        csv += `${p.userId},${dateStr},${breakStartStr},${breakEndStr}\n`;
       });
       return csv;
     }
-    
   </script>
 </body>
 </html>
