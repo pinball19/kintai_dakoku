@@ -227,8 +227,10 @@
       <!-- ボタン押下時のステータスメッセージ -->
       <div id="statusMessage"></div>
 
+      <!-- 「○月○日の休憩記録」タイトル -->
+      <h3 id="todayTitle"></h3>
+
       <!-- 当日の休憩記録一覧 -->
-      <h3>本日の休憩記録</h3>
       <div class="table-container">
         <table id="breakRecordsTable">
           <thead>
@@ -283,6 +285,15 @@
       }
       result += `${pad(s)}秒`;
       return result;
+    }
+
+    // 当日タイトルを「○月○日の休憩記録」に更新する
+    function updateTodayTitle() {
+      const now = new Date();
+      const month = now.getMonth() + 1;
+      const day = now.getDate();
+      const titleElem = document.getElementById("todayTitle");
+      titleElem.textContent = `${month}月${day}日の休憩記録`;
     }
 
     // Firebase の設定
@@ -340,6 +351,11 @@
       } else {
         currentUser = JSON.parse(user);
         userInfoSpan.textContent = "社員番号: " + currentUser.employeeNumber;
+        
+        // 「○月○日の休憩記録」にタイトル更新
+        updateTodayTitle();
+
+        // 休憩記録を読み込み
         loadBreakRecords();
       }
     };
