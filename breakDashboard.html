@@ -29,7 +29,8 @@
 
     /* コンテナ: 幅を制限し、スマホでも中央に */
     .container {
-      max-width: 600px; /* スマホでは 600px 幅に */
+      width: 100%;
+      max-width: 600px; /* スマホでは600px */
       margin: 0 auto;
       padding: 16px;
     }
@@ -78,19 +79,25 @@
       margin-top: 10px;
     }
 
-    /* テーブル */
-    #breakRecordsTable {
+    /* テーブルを横スクロール可能にするコンテナ */
+    .table-container {
       width: 100%;
-      border-collapse: collapse;
+      overflow-x: auto; /* 横スクロール可能 */
       margin-top: 16px;
     }
-    /* ここに white-space: nowrap; を追加 */
+
+    /* テーブル */
+    #breakRecordsTable {
+      border-collapse: collapse;
+      width: 100%; /* 100% にして、必要なら横スクロール */
+      min-width: 600px; /* テーブル自体の最小幅 */
+    }
     #breakRecordsTable th, #breakRecordsTable td {
       border: 1px solid #d2d2d7;
       padding: 12px;
       text-align: center;
       font-size: 14px;
-      white-space: nowrap;
+      white-space: nowrap; /* 1行に収める */
     }
     #breakRecordsTable th {
       background-color: #f5f5f7;
@@ -204,22 +211,24 @@
         <button id="breakEndBtn">休憩終了</button>
       </div>
 
-      <!-- ボタン押下時のステータスメッセージ -->
+      <!-- ステータスメッセージ -->
       <div id="statusMessage"></div>
 
-      <!-- 当日の休憩記録一覧 -->
-      <h3>本日の休憩記録</h3>
-      <table id="breakRecordsTable">
-        <thead>
-          <tr>
-            <th>休憩開始</th>
-            <th>休憩終了</th>
-            <th>休憩時間（分）</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody id="recordsTableBody"></tbody>
-      </table>
+      <!-- 当日の休憩記録一覧（横スクロール） -->
+      <div class="table-container">
+        <table id="breakRecordsTable">
+          <thead>
+            <tr>
+              <th>休憩開始</th>
+              <th>休憩終了</th>
+              <th>休憩時間（分）</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="recordsTableBody"></tbody>
+        </table>
+      </div>
+
       <div style="margin-top: 16px; text-align: right;">
         合計休憩時間（分）: <span id="totalBreakTime">0.00</span>
       </div>
@@ -255,7 +264,7 @@
       }
     }
 
-    // ヘルパー関数: ミリ秒を差分として「〇時〇分〇秒」形式に整形（duration用）
+    // ヘルパー関数: ミリ秒を「〇時〇分〇秒」形式に整形（休憩時間）
     function formatDurationFromMs(ms) {
       const totalSeconds = Math.floor(ms / 1000);
       const h = Math.floor(totalSeconds / 3600);
@@ -278,7 +287,7 @@
 
     // Firebase の設定
     const firebaseConfig = {
-      apiKey: "AIzaSyDzYAatr_PA8cfibICKwb3KZA6xyeNDHtjY",
+      apiKey: "AIzaSyDzYA...",
       authDomain: "kintaidakoku-21454.firebaseapp.com",
       projectId: "kintaidakoku-21454",
       storageBucket: "kintaidakoku-21454.firebasestorage.app",
@@ -417,7 +426,7 @@
       return groups;
     }
 
-    // テーブル表示（分単位、時刻は formatTime() で整形）
+    // テーブル表示
     function renderGroupedRecords(groups) {
       recordsTableBody.innerHTML = "";
       groups.forEach((group, index) => {
@@ -436,17 +445,15 @@
           <td>${endTime}</td>
           <td>${durationStr}</td>
           <td>
-            <div style="display:inline-flex; gap:8px;">
-              <button onclick="editGroup(${index})">編集</button>
-              <button onclick="deleteGroup(${index})">削除</button>
-            </div>
+            <button onclick="editGroup(${index})">編集</button>
+            <button onclick="deleteGroup(${index})">削除</button>
           </td>
         `;
         recordsTableBody.appendChild(row);
       });
     }
 
-    // 合計休憩時間（ミリ秒）計算→フォーマットして表示
+    // 合計休憩時間を計算（ミリ秒合計→〇時〇分〇秒形式）
     function calculateTotalBreakTime(groups) {
       let totalMs = 0;
       groups.forEach(group => {
@@ -456,61 +463,6 @@
       });
       totalBreakTimeSpan.textContent = formatDurationFromMs(totalMs);
     }
-
-    // CSV用文字列生成（時刻は formatTime() で整形、休憩時間は formatDurationFromMs()）
-    function buildCSV(groups) {
-      let csv = "社員番号,日付,休憩開始,休憩終了,休憩時間\n";
-      groups.forEach(group => {
-        let userId = currentUser.employeeNumber;
-        let dateStr = group.breakStart ? group.breakStart.timestamp.toDate().toLocaleDateString() : (group.breakEnd ? group.breakEnd.timestamp.toDate().toLocaleDateString() : "");
-        let breakStartStr = group.breakStart ? formatTime(group.breakStart.timestamp.toDate()) : "";
-        let breakEndStr = group.breakEnd ? formatTime(group.breakEnd.timestamp.toDate()) : "";
-        let durationMs = 0;
-        if (group.breakStart && group.breakEnd) {
-          durationMs = group.breakEnd.timestamp.toDate() - group.breakStart.timestamp.toDate();
-        }
-        let durationStr = (group.breakStart && group.breakEnd) ? formatDurationFromMs(durationMs) : "0秒";
-        csv += `${userId},${dateStr},${breakStartStr},${breakEndStr},${durationStr}\n`;
-      });
-      return csv;
-    }
-
-    // CSVダウンロード
-    document.getElementById("downloadCSVBtn").addEventListener("click", async () => {
-      const today = new Date();
-      today.setHours(0,0,0,0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const snapshot = await db.collection("breakRecords")
-        .where("userId", "==", currentUser.employeeNumber)
-        .where("timestamp", ">=", firebase.firestore.Timestamp.fromDate(today))
-        .where("timestamp", "<", firebase.firestore.Timestamp.fromDate(tomorrow))
-        .orderBy("timestamp", "asc")
-        .get();
-
-      if (snapshot.empty) {
-        alert("ダウンロード対象のデータがありません。");
-        return;
-      }
-
-      let records = [];
-      snapshot.forEach(doc => {
-        let data = doc.data();
-        data.id = doc.id;
-        records.push(data);
-      });
-      let groups = groupBreakRecords(records);
-      let csvContent = buildCSV(groups);
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.setAttribute("href", url);
-      link.setAttribute("download", "break_records.csv");
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    });
 
     // 編集ボタン（簡易実装）
     function editGroup(index) {
@@ -574,6 +526,57 @@
           });
       }
     }
+
+    // CSV用文字列生成（時刻は formatTime()、休憩時間は formatDurationFromMs()）
+    document.getElementById("downloadCSVBtn")?.addEventListener("click", async () => {
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const snapshot = await db.collection("breakRecords")
+        .where("userId", "==", currentUser.employeeNumber)
+        .where("timestamp", ">=", firebase.firestore.Timestamp.fromDate(today))
+        .where("timestamp", "<", firebase.firestore.Timestamp.fromDate(tomorrow))
+        .orderBy("timestamp", "asc")
+        .get();
+
+      if (snapshot.empty) {
+        alert("ダウンロード対象のデータがありません。");
+        return;
+      }
+
+      let records = [];
+      snapshot.forEach(doc => {
+        let data = doc.data();
+        data.id = doc.id;
+        records.push(data);
+      });
+      let groups = groupBreakRecords(records);
+
+      let csv = "社員番号,日付,休憩開始,休憩終了,休憩時間\n";
+      groups.forEach(group => {
+        let userId = currentUser.employeeNumber;
+        let dateStr = group.breakStart ? group.breakStart.timestamp.toDate().toLocaleDateString() : (group.breakEnd ? group.breakEnd.timestamp.toDate().toLocaleDateString() : "");
+        let breakStartStr = group.breakStart ? formatTime(group.breakStart.timestamp.toDate()) : "";
+        let breakEndStr = group.breakEnd ? formatTime(group.breakEnd.timestamp.toDate()) : "";
+        let durationMs = 0;
+        if (group.breakStart && group.breakEnd) {
+          durationMs = group.breakEnd.timestamp.toDate() - group.breakStart.timestamp.toDate();
+        }
+        let durationStr = (group.breakStart && group.breakEnd) ? formatDurationFromMs(durationMs) : "0秒";
+        csv += `${userId},${dateStr},${breakStartStr},${breakEndStr},${durationStr}\n`;
+      });
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", "break_records.csv");
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
   </script>
 </body>
 </html>
